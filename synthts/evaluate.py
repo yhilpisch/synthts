@@ -85,12 +85,14 @@ def plot_sorted(real: np.ndarray, synth: np.ndarray):
 def plot_cumulative(data: pd.DataFrame, n_synth: int=25):
     """Cumulative return paths for real and synthetic series."""
     cols = data.columns[1:n_synth + 1]
-    data[cols].cumsum().apply(np.exp).plot(
-        style='b--', lw=0.7, legend=False)
+    ax = data[cols].cumsum().apply(np.exp).plot(
+        style='b--', lw=0.7, legend=False, label='_nolegend_')
+    # single legend entry for all synth paths
+    ax.plot([], [], 'b--', lw=0.7, label='synthetic')
     data[cols].mean(axis=1).cumsum().apply(np.exp).plot(
-        style='g', lw=2, label='synth mean')
+        style='g', lw=2, ax=ax, label='synth mean')
     data['real'].cumsum().apply(np.exp).plot(
-        style='r', lw=2, label='real')
+        style='r', lw=2, ax=ax, label='real')
     plt.legend();
 
 

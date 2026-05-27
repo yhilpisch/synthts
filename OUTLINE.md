@@ -35,7 +35,7 @@ procedures refactored into reusable Python modules.
 synthetic/
 ├── .gitignore
 ├── OUTLINE.md                # this file
-├── code/
+├── synthts/
 │   ├── __init__.py
 │   ├── data.py               # data loading, return computation, scaling
 │   ├── models.py             # Generator, Discriminator, GAN module
@@ -58,17 +58,17 @@ synthetic/
 
 ### M2 — PyTorch migration and modularisation
 
-- [ ] `code/data.py` — data loading, log-return computation,
+- [ ] `synthts/data.py` — data loading, log-return computation,
       `StandardScaler` wrapping
-- [ ] `code/models.py` — `Generator`, `Discriminator`, `GAN` PyTorch
+- [ ] `synthts/models.py` — `Generator`, `Discriminator`, `GAN` PyTorch
       modules
-- [ ] `code/train.py` — GAN training loop with configurable
+- [ ] `synthts/train.py` — GAN training loop with configurable
       hyperparameters, progress logging
-- [ ] `code/evaluate.py` — KS test, descriptive statistics, comparison
+- [ ] `synthts/evaluate.py` — KS test, descriptive statistics, comparison
       plots
 - [ ] `notebooks/01_synthetic_gan.ipynb` — full PyTorch notebook
       covering the simple (cubic function) and financial examples,
-      importing from `code/`
+      importing from `synthts/`
 
 ### M3 — Extensions (future)
 
