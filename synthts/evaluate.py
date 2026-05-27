@@ -85,15 +85,19 @@ def plot_sorted(real: np.ndarray, synth: np.ndarray):
 def plot_cumulative(data: pd.DataFrame, n_synth: int=25):
     """Cumulative return paths for real and synthetic series."""
     cols = data.columns[1:n_synth + 1]
-    ax = data[cols].cumsum().apply(np.exp).plot(
-        style='b--', lw=0.7, legend=False, label='_nolegend_')
+    fig, ax = plt.subplots()
+    cum = data[cols].cumsum().apply(np.exp)
+    for col in cum.columns:
+        ax.plot(cum.index, cum[col], 'b--', lw=0.7,
+                label='_nolegend_')
     # single legend entry for all synth paths
     ax.plot([], [], 'b--', lw=0.7, label='synthetic')
-    data[cols].mean(axis=1).cumsum().apply(np.exp).plot(
-        style='g', lw=2, ax=ax, label='synth mean')
-    data['real'].cumsum().apply(np.exp).plot(
-        style='r', lw=2, ax=ax, label='real')
-    plt.legend();
+    mean_path = cum.mean(axis=1)
+    ax.plot(mean_path.index, mean_path, 'g', lw=2,
+            label='synth mean')
+    real_path = data['real'].cumsum().apply(np.exp)
+    ax.plot(real_path.index, real_path, 'r', lw=2, label='real')
+    ax.legend();
 
 
 def plot_pvalue_histogram(pvals: np.ndarray, alpha: float=0.05):
