@@ -10,8 +10,7 @@ import numpy as np
 import pytest
 
 from synthts.data import ReturnScaler
-from synthts.models import Generator, Discriminator
-from synthts.train import train_gan, generate_samples
+from synthts.vanilla import Generator, Discriminator, train_gan, generate_samples
 from synthts.evaluate import ks_test, pass_rate
 
 

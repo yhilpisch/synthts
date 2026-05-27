@@ -1,11 +1,10 @@
-"""Tests for synthts.train module."""
+"""Tests for synthts.vanilla training loop."""
 
 import numpy as np
 import torch
 import pytest
 
-from synthts.models import Generator, Discriminator
-from synthts.train import train_gan, generate_samples
+from synthts.vanilla import Generator, Discriminator, train_gan, generate_samples
 
 
 @pytest.fixture()

@@ -1,9 +1,9 @@
-"""Tests for synthts.models module."""
+"""Tests for synthts.vanilla module (Generator, Discriminator, GAN)."""
 
 import torch
 import pytest
 
-from synthts.models import Generator, Discriminator, GAN
+from synthts.vanilla import Generator, Discriminator, GAN
 
 
 class TestGenerator:
