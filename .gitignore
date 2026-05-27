@@ -1,0 +1,211 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+sdist/
+develop-eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# ============================================================
+# LaTeX
+# ============================================================
+**/_minted/
+_minted-*/
+minted-*/
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.brf
+*.cb
+*.cb2
+*.fdb_latexmk
+*.fls
+*.glg
+*.glo
+*.gls
+*.glsdefs
+*.idx
+*.ilg
+*.ind
+*.ist
+*.lof
+*.log
+*.lot
+*.lol
+*.maf
+*.mtc
+*.mtc0
+*.nav
+*.nlo
+*.nls
+*.out
+*.run.xml
+*.snm
+*.synctex
+*.synctex.gz
+*.toc
+*.vrb
+*.xdv
+*.xmpi
+*.acn
+*.acr
+*.alg
+*.loa
+*.listing
+*.pyg
+*.dvi
+*.ps
+
+# LaTeX generated PDFs (keep hand-placed PDFs)
+*.pdfsync
+
+# BibTeX scratch
+*.bib.bak
+*.bib.sav
+*-blx.bib
+
+# ============================================================
+# macOS
+# ============================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# ============================================================
+# Windows
+# ============================================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ============================================================
+# Editors / IDEs
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.#*
+\#*\#
+
+# ============================================================
+# Environment and secrets
+# ============================================================
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# ============================================================
+# Data artifacts
+# ============================================================
+data/raw/
+data/cache/
+data/downloads/
+*.sqlite
+*.sqlite3
+*.db
+*.h5
+*.hdf5
+*.parquet
+*.feather
+*.pkl
+*.pickle
+*.joblib
+*.csv
+!data/.gitkeep
+
+# ============================================================
+# Model artifacts
+# ============================================================
+models/
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# ============================================================
+# Generated figures, outputs, reports
+# ============================================================
+figures/generated/
+figures/cache/
+results/generated/
+output/
+outputs/
+reports/
+*.generated.tex
+*_generated.tex
+
+# ============================================================
+# Temp / scratch / dev
+# ============================================================
+tmp/
+temp/
+.tmp/
+.cache/
+cache/
+scratch/
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+logs/
+*.log.*
+
+# ============================================================
+# Archives
+# ============================================================
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# ============================================================
+# Project-specific
+# ============================================================
+_ignore/
