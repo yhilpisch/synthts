@@ -105,3 +105,104 @@ def plot_pvalue_histogram(pvals: np.ndarray, alpha: float=0.05):
     plt.hist(pvals, bins=100)
     plt.axvline(alpha, color='r')
     plt.title('KS test p-values');
+
+
+# ------------------------------------------------------------------
+# Temporal evaluation metrics
+# ------------------------------------------------------------------
+
+def acf(x: np.ndarray, max_lag: int=20) -> np.ndarray:
+    """Autocorrelation function up to max_lag."""
+    n = len(x)
+    x = x - x.mean()
+    var = np.dot(x, x) / n
+    if var == 0:
+        return np.zeros(max_lag + 1)
+    result = np.correlate(x, x, mode='full')[n - 1:]
+    result = result[:max_lag + 1] / (var * n)
+    return result
+
+
+def compare_acf(real: np.ndarray, synth: np.ndarray,
+                max_lag: int=20) -> dict:
+    """Compare ACF of real vs synthetic returns and squared returns.
+
+    Returns
+    -------
+    dict
+        Keys 'acf_diff' (sum of abs differences in ACF),
+        'acf2_diff' (same for squared returns).
+    """
+    a_real = acf(real, max_lag)
+    a_synth = acf(synth, max_lag)
+    a2_real = acf(real ** 2, max_lag)
+    a2_synth = acf(synth ** 2, max_lag)
+    return {
+        'acf_diff': np.abs(a_real - a_synth).sum(),
+        'acf2_diff': np.abs(a2_real - a2_synth).sum(),
+        'real_acf': a_real,
+        'synth_acf': a_synth,
+        'real_acf2': a2_real,
+        'synth_acf2': a2_synth,
+    }
+
+
+def max_drawdown(returns: np.ndarray) -> float:
+    """Maximum drawdown from a 1-D return array."""
+    cum = np.exp(np.cumsum(returns))
+    peak = np.maximum.accumulate(cum)
+    dd = (cum - peak) / peak
+    return dd.min()
+
+
+def drawdown_distribution(returns: np.ndarray,
+                          n_bootstrap: int=200,
+                          rng_seed: int=None) -> np.ndarray:
+    """Bootstrap distribution of maximum drawdown.
+
+    Slices random contiguous windows and computes max drawdown
+    for each.
+    """
+    from numpy.random import default_rng
+    rng = default_rng(rng_seed)
+    window = min(252, len(returns) // 2)
+    dds = []
+    for _ in range(n_bootstrap):
+        start = rng.integers(0, len(returns) - window)
+        segment = returns[start:start + window]
+        dds.append(max_drawdown(segment))
+    return np.array(dds)
+
+
+def plot_acf_comparison(real: np.ndarray, synth: np.ndarray,
+                        max_lag: int=20):
+    """Side-by-side ACF and squared-return ACF comparison."""
+    comp = compare_acf(real, synth, max_lag)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3))
+    lags = np.arange(max_lag + 1)
+    axes[0].bar(lags - 0.15, comp['real_acf'], width=0.3,
+                color='r', alpha=0.7, label='real')
+    axes[0].bar(lags + 0.15, comp['synth_acf'], width=0.3,
+                color='b', alpha=0.7, label='synthetic')
+    axes[0].set_title('Return ACF')
+    axes[0].legend()
+    axes[1].bar(lags - 0.15, comp['real_acf2'], width=0.3,
+                color='r', alpha=0.7, label='real')
+    axes[1].bar(lags + 0.15, comp['synth_acf2'], width=0.3,
+                color='b', alpha=0.7, label='synthetic')
+    axes[1].set_title('Squared-return ACF')
+    axes[1].legend()
+    plt.tight_layout();
+
+
+def plot_drawdown_comparison(real: np.ndarray, synth: np.ndarray,
+                             n_bootstrap: int=200, bins: int=30):
+    """Histogram overlay of max-drawdown bootstrap distributions."""
+    dd_real = drawdown_distribution(real, n_bootstrap, rng_seed=0)
+    dd_synth = drawdown_distribution(synth, n_bootstrap, rng_seed=1)
+    plt.hist(dd_real, bins=bins, color='r', alpha=0.7,
+             label='real', density=True)
+    plt.hist(dd_synth, bins=bins, color='b', alpha=0.7,
+             label='synthetic', density=True)
+    plt.xlabel('Max drawdown')
+    plt.legend();

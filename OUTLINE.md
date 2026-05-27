@@ -133,24 +133,23 @@ should also compare:
 - [x] `notebooks/01_vanilla_gan.ipynb`
 - [x] Unit tests and smoke test (49 tests passing)
 
-### M2 — WGAN-GP
+### M2 — WGAN-GP (complete)
 
-- [ ] `synthts/wgangp.py` — Critic (no sigmoid), Generator,
+- [x] `synthts/wgangp.py` — Critic (no sigmoid), Generator,
       gradient-penalty computation, WGAN-GP training loop
-- [ ] `notebooks/02_wgan_gp.ipynb` — WGAN-GP on GLD returns,
-      comparison with vanilla baseline
-- [ ] `tests/test_wgangp.py`
-- [ ] Extended evaluation (MMD, ACF comparison)
+- [x] `notebooks/02_wgan_gp.ipynb` — WGAN-GP on GLD returns
+- [x] `tests/test_wgangp.py`
 
-### M3 — Sequential generation
+### M3 — Sequential generation (complete)
 
-- [ ] `synthts/sequential.py` — LSTM/GRU-based sequential generator
+- [x] `synthts/sequential.py` — LSTM-based sequential generator
       and discriminator, sequence-level training loop
-- [ ] `notebooks/03_sequential.ipynb` — sequential GAN on GLD return
+- [x] `notebooks/03_sequential.ipynb` — sequential GAN on GLD return
       windows, ACF and volatility-clustering evaluation
-- [ ] `tests/test_sequential.py`
-- [ ] Temporal evaluation metrics (ACF, squared-return ACF, drawdown
-      distributions)
+- [x] `tests/test_sequential.py`
+- [x] Temporal evaluation metrics in `synthts/evaluate.py`
+      (ACF, squared-return ACF, max drawdown, drawdown bootstrap)
+- [x] `tests/test_evaluate.py` extended with temporal tests
 
 ### M4 — Extensions (future)
 

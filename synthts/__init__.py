@@ -8,3 +8,7 @@ from synthts.wgangp import (  # noqa: F401
     WGANGenerator, Critic,
     train_wgangp, generate_samples as wgan_generate_samples,
 )
+from synthts.sequential import (  # noqa: F401
+    SeqGenerator, SeqDiscriminator,
+    train_seq_gan, generate_sequences,
+)

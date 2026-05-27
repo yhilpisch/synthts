@@ -11,6 +11,8 @@ from synthts.evaluate import (
     ks_test, ks_test_batch, pass_rate, describe_comparison,
     mse_sorted, plot_real_vs_synth, plot_histograms, plot_sorted,
     plot_cumulative, plot_pvalue_histogram,
+    acf, compare_acf, max_drawdown, drawdown_distribution,
+    plot_acf_comparison, plot_drawdown_comparison,
 )
 
 
@@ -144,4 +146,90 @@ class TestPlots:
 
     def test_plot_pvalue_histogram(self):
         plot_pvalue_histogram(np.random.uniform(size=20))
+        assert plt.gcf().number > 0
+
+
+# ------------------------------------------------------------------
+# Temporal evaluation tests
+# ------------------------------------------------------------------
+
+class TestAcf:
+    def test_lag_zero_is_one(self):
+        x = np.random.randn(100)
+        a = acf(x, max_lag=10)
+        assert a[0] == pytest.approx(1.0)
+
+    def test_output_length(self):
+        x = np.random.randn(100)
+        a = acf(x, max_lag=20)
+        assert len(a) == 21
+
+    def test_white_noise_near_zero(self):
+        np.random.seed(42)
+        x = np.random.randn(2000)
+        a = acf(x, max_lag=10)
+        # lags >= 1 should be close to zero for white noise
+        assert np.abs(a[1:]).max() < 0.1
+
+    def test_zero_array(self):
+        a = acf(np.zeros(50), max_lag=5)
+        np.testing.assert_array_equal(a, np.zeros(6))
+
+
+class TestCompareAcf:
+    def test_identical_series_zero_diff(self):
+        x = np.random.randn(200)
+        comp = compare_acf(x, x)
+        assert comp['acf_diff'] == pytest.approx(0.0)
+        assert comp['acf2_diff'] == pytest.approx(0.0)
+
+    def test_returns_all_keys(self):
+        comp = compare_acf(np.random.randn(50), np.random.randn(50))
+        for key in ['acf_diff', 'acf2_diff', 'real_acf', 'synth_acf',
+                    'real_acf2', 'synth_acf2']:
+            assert key in comp
+
+
+class TestMaxDrawdown:
+    def test_no_drawdown(self):
+        # monotonically increasing
+        rets = np.array([0.01] * 10)
+        assert max_drawdown(rets) == pytest.approx(0.0, abs=1e-10)
+
+    def test_known_drawdown(self):
+        # up 10%, down 20%, up 10%
+        rets = np.log(np.array([1.1, 0.8, 1.1]))
+        dd = max_drawdown(rets)
+        assert dd < 0  #  # negative by definition
+
+    def test_constant_zero_returns(self):
+        rets = np.zeros(50)
+        assert max_drawdown(rets) == pytest.approx(0.0, abs=1e-10)
+
+
+class TestDrawdownDistribution:
+    def test_output_length(self):
+        rets = np.random.randn(500) * 0.01
+        dds = drawdown_distribution(rets, n_bootstrap=20, rng_seed=0)
+        assert len(dds) == 20
+
+    def test_all_negative_or_zero(self):
+        rets = np.random.randn(500) * 0.01
+        dds = drawdown_distribution(rets, n_bootstrap=50, rng_seed=0)
+        assert (dds <= 0).all()
+
+
+class TestTemporalPlots:
+    @pytest.fixture(autouse=True)
+    def close_figures(self):
+        yield
+        plt.close('all')
+
+    def test_plot_acf_comparison(self):
+        plot_acf_comparison(np.random.randn(200), np.random.randn(200))
+        assert plt.gcf().number > 0
+
+    def test_plot_drawdown_comparison(self):
+        rets = np.random.randn(500) * 0.01
+        plot_drawdown_comparison(rets, rets * 1.5)
         assert plt.gcf().number > 0
