@@ -7,20 +7,15 @@ from numpy.random import default_rng
 
 
 class WGANGenerator(nn.Module):
-    """Dense generator for WGAN-GP with BatchNorm stabilisation."""
+    """Dense generator for WGAN-GP (2 hidden layers, no norm)."""
 
-    def __init__(self, latent_dim: int=8, hidden_units: int=128,
+    def __init__(self, latent_dim: int=2, hidden_units: int=32,
                  output_dim: int=1):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(latent_dim, hidden_units),
-            nn.BatchNorm1d(hidden_units),
             nn.ReLU(),
             nn.Linear(hidden_units, hidden_units),
-            nn.BatchNorm1d(hidden_units),
-            nn.ReLU(),
-            nn.Linear(hidden_units, hidden_units),
-            nn.BatchNorm1d(hidden_units),
             nn.ReLU(),
             nn.Linear(hidden_units, output_dim),
         )
@@ -37,13 +32,10 @@ class Critic(nn.Module):
     gradient penalty for low-dimensional problems.
     """
 
-    def __init__(self, input_dim: int=1, hidden_units: int=128):
+    def __init__(self, input_dim: int=1, hidden_units: int=32):
         super().__init__()
         self.net = nn.Sequential(
             nn.utils.spectral_norm(nn.Linear(input_dim, hidden_units)),
-            nn.LeakyReLU(0.2),
-            nn.utils.spectral_norm(
-                nn.Linear(hidden_units, hidden_units)),
             nn.LeakyReLU(0.2),
             nn.utils.spectral_norm(
                 nn.Linear(hidden_units, hidden_units)),
@@ -78,16 +70,16 @@ def _gradient_penalty(critic, real, fake, device: str='cpu',
 
 def train_wgangp(generator, critic, data_scaled,
                  epochs: int=10001, batch_size: int=64,
-                 n_critic: int=1, lr_g: float=0.0002,
-                 lr_c: float=0.0002, latent_dim: int=8,
+                 n_critic: int=1, lr_g: float=0.0001,
+                 lr_c: float=0.001, latent_dim: int=2,
                  lambda_gp: float=10.0, seed: int=100,
                  log_interval: int=2000, device: str='cpu'):
     """Train a WGAN-GP on standardised 1-D data.
 
-    Uses spectral normalisation in the critic and BCE loss
-    (stable configuration for low-dimensional data). When
-    ``n_critic > 1``, gradient-penalty steps are used instead
-    of spectral normalisation + BCE.
+    Default mode (n_critic=1) uses spectral normalisation on the
+    critic with BCE loss — the most stable configuration for
+    low-dimensional financial returns.  Setting n_critic > 1
+    switches to Wasserstein distance + gradient-penalty training.
 
     Parameters
     ----------
@@ -98,10 +90,12 @@ def train_wgangp(generator, critic, data_scaled,
     epochs : int
     batch_size : int
     n_critic : int
-        When 1 (default), uses spectral-norm + BCE training.
-        When > 1, uses Wasserstein + gradient-penalty training.
+        When 1 (default), spectral-norm + BCE training.
+        When > 1, Wasserstein + gradient-penalty training.
     lr_g : float
+        Generator learning rate.
     lr_c : float
+        Critic learning rate (typically higher than lr_g).
     latent_dim : int
     lambda_gp : float
         Only used when n_critic > 1.
@@ -213,7 +207,7 @@ def train_wgangp(generator, critic, data_scaled,
     return history
 
 
-def generate_samples(generator, n_samples: int, latent_dim: int=8,
+def generate_samples(generator, n_samples: int, latent_dim: int=2,
                      device: str='cpu') -> np.ndarray:
     """Produce synthetic samples from a trained generator."""
     gen = generator.to(device)

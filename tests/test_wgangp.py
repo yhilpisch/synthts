@@ -14,7 +14,7 @@ from synthts.wgangp import (
 class TestWGANGenerator:
     def test_output_shape_default(self):
         g = WGANGenerator()
-        z = torch.randn(8, 8)
+        z = torch.randn(8, 2)
         out = g(z)
         assert out.shape == (8, 1)
 
@@ -24,15 +24,11 @@ class TestWGANGenerator:
         out = g(z)
         assert out.shape == (10, 3)
 
-    def test_uses_batchnorm(self):
-        g = WGANGenerator(hidden_units=32)
-        layer_types = [type(m) for m in g.net]
-        assert nn.BatchNorm1d in layer_types
-
-    def test_three_hidden_layers(self):
+    def test_two_hidden_layers(self):
         g = WGANGenerator()
         linear_layers = [m for m in g.net if isinstance(m, nn.Linear)]
-        assert len(linear_layers) == 4
+        # 2 hidden + 1 output = 3 linear layers
+        assert len(linear_layers) == 3
 
     def test_gradient_flows(self):
         g = WGANGenerator(latent_dim=4, hidden_units=16, output_dim=1)
@@ -69,10 +65,10 @@ class TestCritic:
         layer_types = [type(m) for m in c.net]
         assert nn.LeakyReLU in layer_types
 
-    def test_three_hidden_layers(self):
+    def test_two_hidden_layers(self):
         c = Critic()
         linear_layers = [m for m in c.net if isinstance(m, nn.Linear)]
-        assert len(linear_layers) == 4
+        assert len(linear_layers) == 3
 
     def test_gradient_flows(self):
         c = Critic(input_dim=1, hidden_units=16)

@@ -59,11 +59,11 @@ synth = scaler.inverse_transform(samples)
 ```python
 from synthts.wgangp import WGANGenerator, Critic, train_wgangp, generate_samples
 
-g = WGANGenerator(latent_dim=8, hidden_units=128, output_dim=1)
-c = Critic(input_dim=1, hidden_units=128)
+g = WGANGenerator(latent_dim=2, hidden_units=32, output_dim=1)
+c = Critic(input_dim=1, hidden_units=32)
 train_wgangp(g, c, rets_.reshape(-1, 1),
              epochs=10001, batch_size=64, seed=100)
-synth = generate_samples(g, len(rets_), latent_dim=8)
+synth = generate_samples(g, len(rets_), latent_dim=2)
 ```
 
 ### Sequential GAN
@@ -206,17 +206,16 @@ synthetic/
 
 | Parameter | Vanilla | WGAN-GP | Sequential |
 |-----------|---------|---------|------------|
-| Hidden units | 32 / 24 | 128 | 64 |
-| Latent dim | 1 | 8 | 4 |
+| Hidden units | 32 / 24 | 32 | 64 |
+| Latent dim | 1 | 2 | 4 |
 | Sequence length | — | — | 63 (3-month) |
 | Batch size | 32 | 64 | 32 |
 | Epochs | 5001 | 10001 | 5001 |
-| LR (G) | 0.0001 | 0.0002 | 0.0001 |
-| LR (D/C) | 0.001 | 0.0002 | 0.001 |
+| LR (G) | 0.0001 | 0.0001 | 0.0001 |
+| LR (D/C) | 0.001 | 0.001 | 0.001 |
 | n_critic | — | 1 (SN+BCE) | — |
 | λ_GP | — | 10.0 (GP mode) | — |
 | Critic norm | — | Spectral norm | — |
-| Gen norm | — | BatchNorm | — |
 | LSTM layers | — | — | 2 |
 | Activation (G) | ReLU | ReLU | — |
 | Activation (D/C) | ReLU / Sigmoid | LeakyReLU / Sigmoid | Sigmoid (last) |
