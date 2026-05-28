@@ -75,10 +75,21 @@ def plot_histograms(real: np.ndarray, synth: np.ndarray,
     plt.legend();
 
 
-def plot_sorted(real: np.ndarray, synth: np.ndarray):
-    """Sorted-value comparison (QQ-style)."""
-    plt.plot(np.sort(real), 'r', lw=1.0, label='real')
-    plt.plot(np.sort(synth), 'b--', lw=1.0, label='synthetic')
+def plot_sorted(real: np.ndarray, synth: np.ndarray,
+                n_quantiles: int=200):
+    """Quantile-quantile comparison of real vs synthetic returns.
+
+    Both series are mapped to a common percentile grid so the
+    plot works even when the arrays have different lengths.
+    """
+    q = np.linspace(0, 1, n_quantiles)
+    r_q = np.quantile(real, q)
+    s_q = np.quantile(synth, q)
+    plt.plot(r_q, s_q, 'b', lw=0.8, label='synth vs real')
+    lims = [min(r_q.min(), s_q.min()), max(r_q.max(), s_q.max())]
+    plt.plot(lims, lims, 'r--', lw=0.7, label='y = x')
+    plt.xlabel('Real quantiles')
+    plt.ylabel('Synthetic quantiles')
     plt.legend();
 
 
