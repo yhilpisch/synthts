@@ -118,6 +118,7 @@ class TestTrainSeqGan:
             seq_len=30, epochs=10, batch_size=8,
             latent_dim=2, seed=42, log_interval=100)
         assert history is not None
+        assert len(history['g_loss']) == 10
 
     def test_generator_weights_change(self, simple_data):
         data_scaled, _ = simple_data
@@ -145,6 +146,17 @@ class TestTrainSeqGan:
             seed=42, log_interval=100)
         assert 'g_loss' in history
 
+    def test_short_data_raises(self):
+        data_scaled = np.random.randn(10, 1)
+        g = SeqGenerator(latent_dim=2, noise_dim=1,
+                         hidden_units=16, output_dim=1,
+                         seq_len=30, num_layers=1)
+        d = SeqDiscriminator(input_dim=1, hidden_units=16)
+        with pytest.raises(ValueError):
+            train_seq_gan(g, d, data_scaled,
+                          seq_len=30, epochs=1, batch_size=8,
+                          latent_dim=2, seed=42, log_interval=100)
+
 
 class TestGenerateSequences:
     def test_output_shape(self):
@@ -170,3 +182,11 @@ class TestGenerateSequences:
             s1 = generate_sequences(g, 1, latent_dim=2)
             s2 = generate_sequences(g, 1, latent_dim=2)
         assert not np.allclose(s1, s2)
+
+    def test_seed_reproducible_output(self):
+        g = SeqGenerator(latent_dim=2, noise_dim=1,
+                         hidden_units=16, output_dim=1,
+                         seq_len=30, num_layers=1)
+        s1 = generate_sequences(g, 2, latent_dim=2, seed=10)
+        s2 = generate_sequences(g, 2, latent_dim=2, seed=10)
+        assert np.allclose(s1, s2)

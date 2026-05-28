@@ -11,8 +11,11 @@ from synthts.evaluate import (
     ks_test, ks_test_batch, pass_rate, describe_comparison,
     mse_sorted, plot_real_vs_synth, plot_histograms, plot_sorted,
     plot_cumulative, plot_pvalue_histogram,
+    rolling_windows, sample_windows, sequence_ks_pvalues,
     acf, compare_acf, max_drawdown, drawdown_distribution,
+    average_acf, compare_acf_windows, drawdown_distribution_windows,
     plot_acf_comparison, plot_drawdown_comparison,
+    plot_acf_window_comparison, plot_drawdown_window_comparison,
 )
 
 
@@ -190,6 +193,40 @@ class TestCompareAcf:
             assert key in comp
 
 
+class TestWindowMetrics:
+    def test_rolling_windows_shape(self):
+        x = np.arange(10)
+        windows = rolling_windows(x, seq_len=4)
+        assert windows.shape == (7, 4)
+
+    def test_sample_windows_shape(self):
+        x = np.arange(20)
+        windows = sample_windows(x, seq_len=5, n_windows=3,
+                                 rng_seed=1)
+        assert windows.shape == (3, 5)
+
+    def test_sequence_ks_pvalues_length(self):
+        real = np.random.randn(4, 10)
+        synth = np.random.randn(4, 10)
+        pvals = sequence_ks_pvalues(real, synth)
+        assert len(pvals) == 4
+
+    def test_average_acf_shape(self):
+        windows = np.random.randn(5, 20)
+        assert len(average_acf(windows, max_lag=4)) == 5
+
+    def test_compare_acf_windows_keys(self):
+        real = np.random.randn(5, 20)
+        synth = np.random.randn(5, 20)
+        comp = compare_acf_windows(real, synth, max_lag=4)
+        assert 'acf_diff' in comp
+
+    def test_drawdown_distribution_windows_length(self):
+        windows = np.random.randn(5, 20) * 0.01
+        dds = drawdown_distribution_windows(windows)
+        assert len(dds) == 5
+
+
 class TestMaxDrawdown:
     def test_no_drawdown(self):
         # monotonically increasing
@@ -232,4 +269,16 @@ class TestTemporalPlots:
     def test_plot_drawdown_comparison(self):
         rets = np.random.randn(500) * 0.01
         plot_drawdown_comparison(rets, rets * 1.5)
+        assert plt.gcf().number > 0
+
+    def test_plot_acf_window_comparison(self):
+        real = np.random.randn(5, 50)
+        synth = np.random.randn(5, 50)
+        plot_acf_window_comparison(real, synth, max_lag=5)
+        assert plt.gcf().number > 0
+
+    def test_plot_drawdown_window_comparison(self):
+        real = np.random.randn(5, 50) * 0.01
+        synth = np.random.randn(5, 50) * 0.01
+        plot_drawdown_window_comparison(real, synth)
         assert plt.gcf().number > 0

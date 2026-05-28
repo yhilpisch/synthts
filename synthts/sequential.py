@@ -94,11 +94,44 @@ class SeqDiscriminator(nn.Module):
         return self.net(x.permute(0, 2, 1))
 
 
+def _acf_torch(x: torch.Tensor, max_lag: int=5) -> torch.Tensor:
+    """Average temporal ACF for a batch of sequences."""
+    x = x - x.mean(dim=1, keepdim=True)
+    var = x.pow(2).mean(dim=1, keepdim=True).clamp_min(1e-6)
+    values = []
+    for lag in range(1, max_lag + 1):
+        cov = (x[:, :-lag, :] * x[:, lag:, :]).mean(dim=1,
+                                                     keepdim=True)
+        values.append((cov / var).mean())
+    return torch.stack(values)
+
+
+def _stat_loss(real_seq: torch.Tensor, fake_seq: torch.Tensor,
+               max_lag: int=5) -> torch.Tensor:
+    """Differentiable marginal and temporal calibration loss."""
+    real = real_seq.reshape(-1, real_seq.shape[-1])
+    fake = fake_seq.reshape(-1, fake_seq.shape[-1])
+    q = torch.tensor([0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99],
+                     device=fake_seq.device)
+
+    mean_loss = (fake.mean(dim=0) - real.mean(dim=0)).pow(2).mean()
+    std_loss = (fake.std(dim=0) - real.std(dim=0)).pow(2).mean()
+    quant_loss = (torch.quantile(fake, q, dim=0)
+                  - torch.quantile(real, q, dim=0)).pow(2).mean()
+    acf_loss = (_acf_torch(fake_seq, max_lag=max_lag)
+                - _acf_torch(real_seq, max_lag=max_lag)).pow(2).mean()
+    acf2_loss = (_acf_torch(fake_seq.pow(2), max_lag=max_lag)
+                 - _acf_torch(real_seq.pow(2), max_lag=max_lag)
+                 ).pow(2).mean()
+    return mean_loss + std_loss + quant_loss + acf_loss + acf2_loss
+
+
 def train_seq_gan(generator, discriminator, data_scaled,
                   seq_len: int=63, epochs: int=5001,
                   batch_size: int=64, lr_d: float=0.0001,
                   lr_g: float=0.0002, latent_dim: int=4,
                   label_smooth: float=0.1, n_gen_steps: int=2,
+                  stat_weight: float=5.0, stat_max_lag: int=5,
                   seed: int=100, log_interval: int=1000,
                   device: str='cpu'):
     """Train a sequential GAN on standardised 1-D return data.
@@ -125,6 +158,10 @@ def train_seq_gan(generator, discriminator, data_scaled,
         One-sided smoothing for real labels.
     n_gen_steps : int
         Generator optimisation steps per discriminator step.
+    stat_weight : float
+        Weight for auxiliary marginal and temporal statistic matching.
+    stat_max_lag : int
+        Maximum lag for auxiliary ACF matching.
     seed : int
     log_interval : int
     device : str
@@ -150,6 +187,8 @@ def train_seq_gan(generator, discriminator, data_scaled,
     data_t = torch.tensor(data_scaled, dtype=torch.float32,
                           device=device)
     n_windows = n - seq_len + 1
+    if n_windows <= 0:
+        raise ValueError('seq_len must not exceed the number of returns')
     windows = data_t.unfold(0, seq_len, 1).permute(0, 2, 1)
 
     smooth_ones = torch.full((batch_size, 1), 1.0 - label_smooth,
@@ -184,8 +223,17 @@ def train_seq_gan(generator, discriminator, data_scaled,
             d_fake = disc(fake_seq)
             loss_g = bce(d_fake, torch.ones(batch_size, 1,
                                             device=device))
+            if stat_weight:
+                idx_g = rng.integers(0, n_windows, batch_size)
+                stat = _stat_loss(windows[idx_g], fake_seq,
+                                  max_lag=stat_max_lag)
+                loss_g = loss_g + stat_weight * stat
             loss_g.backward()
             opt_g.step()
+
+        history['g_loss'].append(loss_g.item())
+        history['d_loss_real'].append(loss_real.item())
+        history['d_loss_fake'].append(loss_fake.item())
 
         if epoch % log_interval == 0:
             print(f'Epoch {epoch:5d} | '
@@ -198,6 +246,7 @@ def train_seq_gan(generator, discriminator, data_scaled,
 
 def generate_sequences(generator, n_sequences: int,
                        latent_dim: int=4,
+                       seed: int=None,
                        device: str='cpu') -> np.ndarray:
     """Produce synthetic return sequences from a trained generator.
 
@@ -206,6 +255,8 @@ def generate_sequences(generator, n_sequences: int,
     np.ndarray
         Shape (n_sequences, seq_len, output_dim).
     """
+    if seed is not None:
+        torch.manual_seed(seed)
     gen = generator.to(device)
     gen.eval()
     with torch.no_grad():

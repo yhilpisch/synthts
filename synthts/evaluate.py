@@ -122,6 +122,32 @@ def plot_pvalue_histogram(pvals: np.ndarray, alpha: float=0.05):
 # Temporal evaluation metrics
 # ------------------------------------------------------------------
 
+def rolling_windows(returns: np.ndarray, seq_len: int) -> np.ndarray:
+    """Create overlapping return windows."""
+    returns = np.asarray(returns)
+    if seq_len > len(returns):
+        raise ValueError('seq_len must not exceed the number of returns')
+    return np.lib.stride_tricks.sliding_window_view(returns, seq_len)
+
+
+def sample_windows(returns: np.ndarray, seq_len: int, n_windows: int,
+                   rng_seed: int=None) -> np.ndarray:
+    """Sample contiguous return windows."""
+    windows = rolling_windows(returns, seq_len)
+    rng = np.random.default_rng(rng_seed)
+    idx = rng.integers(0, len(windows), n_windows)
+    return windows[idx]
+
+
+def sequence_ks_pvalues(real_windows: np.ndarray,
+                        synth_windows: np.ndarray) -> np.ndarray:
+    """KS p-values for matched real and synthetic windows."""
+    n = min(len(real_windows), len(synth_windows))
+    return np.array([
+        ks_test(real_windows[i], synth_windows[i])['pvalue']
+        for i in range(n)
+    ])
+
 def acf(x: np.ndarray, max_lag: int=20) -> np.ndarray:
     """Autocorrelation function up to max_lag."""
     n = len(x)
@@ -148,6 +174,29 @@ def compare_acf(real: np.ndarray, synth: np.ndarray,
     a_synth = acf(synth, max_lag)
     a2_real = acf(real ** 2, max_lag)
     a2_synth = acf(synth ** 2, max_lag)
+    return {
+        'acf_diff': np.abs(a_real - a_synth).sum(),
+        'acf2_diff': np.abs(a2_real - a2_synth).sum(),
+        'real_acf': a_real,
+        'synth_acf': a_synth,
+        'real_acf2': a2_real,
+        'synth_acf2': a2_synth,
+    }
+
+
+def average_acf(windows: np.ndarray, max_lag: int=20) -> np.ndarray:
+    """Average ACF over a two-dimensional window array."""
+    return np.array([acf(w, max_lag) for w in windows]).mean(axis=0)
+
+
+def compare_acf_windows(real_windows: np.ndarray,
+                        synth_windows: np.ndarray,
+                        max_lag: int=20) -> dict:
+    """Compare average ACFs of real and synthetic windows."""
+    a_real = average_acf(real_windows, max_lag)
+    a_synth = average_acf(synth_windows, max_lag)
+    a2_real = average_acf(real_windows ** 2, max_lag)
+    a2_synth = average_acf(synth_windows ** 2, max_lag)
     return {
         'acf_diff': np.abs(a_real - a_synth).sum(),
         'acf2_diff': np.abs(a2_real - a2_synth).sum(),
@@ -185,10 +234,37 @@ def drawdown_distribution(returns: np.ndarray,
     return np.array(dds)
 
 
+def drawdown_distribution_windows(windows: np.ndarray) -> np.ndarray:
+    """Maximum drawdown for every return window."""
+    return np.array([max_drawdown(w) for w in windows])
+
+
 def plot_acf_comparison(real: np.ndarray, synth: np.ndarray,
                         max_lag: int=20):
     """Side-by-side ACF and squared-return ACF comparison."""
     comp = compare_acf(real, synth, max_lag)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3))
+    lags = np.arange(max_lag + 1)
+    axes[0].bar(lags - 0.15, comp['real_acf'], width=0.3,
+                color='r', alpha=0.7, label='real')
+    axes[0].bar(lags + 0.15, comp['synth_acf'], width=0.3,
+                color='b', alpha=0.7, label='synthetic')
+    axes[0].set_title('Return ACF')
+    axes[0].legend()
+    axes[1].bar(lags - 0.15, comp['real_acf2'], width=0.3,
+                color='r', alpha=0.7, label='real')
+    axes[1].bar(lags + 0.15, comp['synth_acf2'], width=0.3,
+                color='b', alpha=0.7, label='synthetic')
+    axes[1].set_title('Squared-return ACF')
+    axes[1].legend()
+    plt.tight_layout();
+
+
+def plot_acf_window_comparison(real_windows: np.ndarray,
+                               synth_windows: np.ndarray,
+                               max_lag: int=20):
+    """Side-by-side average ACF comparison for return windows."""
+    comp = compare_acf_windows(real_windows, synth_windows, max_lag)
     fig, axes = plt.subplots(1, 2, figsize=(10, 3))
     lags = np.arange(max_lag + 1)
     axes[0].bar(lags - 0.15, comp['real_acf'], width=0.3,
@@ -211,6 +287,20 @@ def plot_drawdown_comparison(real: np.ndarray, synth: np.ndarray,
     """Histogram overlay of max-drawdown bootstrap distributions."""
     dd_real = drawdown_distribution(real, n_bootstrap, rng_seed=0)
     dd_synth = drawdown_distribution(synth, n_bootstrap, rng_seed=1)
+    plt.hist(dd_real, bins=bins, color='r', alpha=0.7,
+             label='real', density=True)
+    plt.hist(dd_synth, bins=bins, color='b', alpha=0.7,
+             label='synthetic', density=True)
+    plt.xlabel('Max drawdown')
+    plt.legend();
+
+
+def plot_drawdown_window_comparison(real_windows: np.ndarray,
+                                    synth_windows: np.ndarray,
+                                    bins: int=30):
+    """Histogram overlay of max drawdowns from return windows."""
+    dd_real = drawdown_distribution_windows(real_windows)
+    dd_synth = drawdown_distribution_windows(synth_windows)
     plt.hist(dd_real, bins=bins, color='r', alpha=0.7,
              label='real', density=True)
     plt.hist(dd_synth, bins=bins, color='b', alpha=0.7,
