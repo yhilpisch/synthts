@@ -1,4 +1,4 @@
-"""Count sequential GAN sweep combinations."""
+"""Count sweep combinations."""
 
 from __future__ import annotations
 
@@ -13,22 +13,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_CONFIG = {
     'max_trials': None,
-    'hu_gen_values': [64, 96],
-    'hu_disc_values': [64],
-    'batch_size_values': [128, 256],
-    'lr_g_values': [0.0002, 0.0003],
-    'stat_weight_values': [3.0, 5.0, 7.5],
-    'epochs_values': [750, 1500],
+    'grid_keys': None,
 }
-
-GRID_KEYS = [
-    'hu_gen_values',
-    'hu_disc_values',
-    'batch_size_values',
-    'lr_g_values',
-    'stat_weight_values',
-    'epochs_values',
-]
 
 
 def parse_values(value) -> list:
@@ -59,12 +45,16 @@ def main() -> None:
     """Print sweep combination counts."""
     args = parse_args()
     config = load_config(args.config)
-    counts = {key: len(parse_values(config[key])) for key in GRID_KEYS}
+    grid_keys = config.get('grid_keys')
+    if not grid_keys:
+        grid_keys = sorted(k for k in config if k.endswith('_values'))
+    counts = {key: len(parse_values(config[key])) for key in grid_keys}
     total = math.prod(counts.values())
-    effective = min(total, config['max_trials']) if config['max_trials'] else total
+    max_trials = config['max_trials']
+    effective = min(total, max_trials) if max_trials else total
 
     print(f'config: {PROJECT_ROOT / args.config}')
-    for key in GRID_KEYS:
+    for key in grid_keys:
         print(f'{key}: {counts[key]}')
     print(f'total combinations: {total}')
     print(f'effective trials: {effective}')

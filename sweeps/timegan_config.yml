@@ -1,0 +1,45 @@
+# TimeGAN sweep configuration.
+
+symbol: GLD
+seed: 100
+seq_len: 63
+
+n_jobs: 3
+torch_threads: 1
+max_trials: null
+out_dir: sweeps/results
+export_best: sweeps/timegan_best.yml
+export_on_complete: true
+
+n_eval: 100
+
+input_dim: 1
+output_dim: 1
+num_layers: 1
+gamma: 1.0
+recon_weight: 10.0
+
+grid_keys:
+  - hidden_units_values
+  - latent_dim_values
+  - noise_dim_values
+  - batch_size_values
+  - lr_values
+  - supervisor_weight_values
+  - moment_weight_values
+  - stat_weight_values
+  - stat_max_lag_values
+  - joint_epochs_values
+
+embedding_epochs: 500
+supervisor_epochs: 500
+hidden_units_values: [64, 96]
+latent_dim_values: [16, 24]
+noise_dim_values: [8, 16]
+batch_size_values: [128]
+lr_values: [0.0005, 0.001]
+supervisor_weight_values: [50.0, 100.0]
+moment_weight_values: [50.0, 100.0]
+stat_weight_values: [5.0, 10.0]
+stat_max_lag_values: [10]
+joint_epochs_values: [750]
