@@ -63,6 +63,8 @@ DEFAULT_CONFIG = {
     'out_dir': 'sweeps/results',
     'export_best': 'sweeps/sequential_best.yml',
     'export_on_complete': True,
+    'task_order': 'random',
+    'task_order_seed': None,
 }
 
 
@@ -93,6 +95,9 @@ def parse_values(value, kind=float) -> list:
 
 def build_configs(settings: dict) -> list[SweepConfig]:
     """Create the sweep grid."""
+    task_order = settings.get('task_order', 'random')
+    if task_order not in {'grid', 'random'}:
+        raise ValueError('task_order must be grid or random')
     grid = itertools.product(
         parse_values(settings['hu_gen_values'], int),
         parse_values(settings['hu_disc_values'], int),
@@ -121,6 +126,12 @@ def build_configs(settings: dict) -> list[SweepConfig]:
             stat_max_lag=settings['stat_max_lag'],
         )
         configs.append(trial_config)
+    if task_order == 'random':
+        order_seed = settings.get('task_order_seed')
+        if order_seed is None:
+            order_seed = settings['seed']
+        rng = np.random.default_rng(int(order_seed))
+        rng.shuffle(configs)
     if settings['max_trials']:
         configs = configs[:settings['max_trials']]
     return configs
@@ -370,6 +381,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--epochs-values', default=argparse.SUPPRESS)
     parser.add_argument('--out-dir', default=argparse.SUPPRESS)
     parser.add_argument('--export-best', default=argparse.SUPPRESS)
+    parser.add_argument('--task-order', default=argparse.SUPPRESS)
+    parser.add_argument('--task-order-seed', type=int,
+                        default=argparse.SUPPRESS)
     parser.add_argument('--export-on-complete', action='store_true',
                         default=argparse.SUPPRESS)
     parser.add_argument('--no-export-on-complete',
@@ -408,15 +422,21 @@ def main() -> None:
     print(f'Running {len(payloads)} trials with n_jobs={settings["n_jobs"]}')
 
     rows = []
+    best = None
     if settings['n_jobs'] == 1:
         progress = tqdm(payloads, total=len(payloads), desc='trials')
         for payload in progress:
             row = run_trial(payload)
             rows.append(row)
             write_row(csv_path, row)
+            if best is None or row['score'] < best['score']:
+                best = row
+            best_path.write_text(json.dumps(best, indent=2))
+            export_best_config(best, settings, out_dir)
             progress.set_postfix(
                 trial=f'{row["trial"]:03d}',
                 score=f'{row["score"]:.4f}',
+                best=f'{best["score"]:.4f}',
             )
     else:
         with ProcessPoolExecutor(max_workers=settings['n_jobs']) as pool:
@@ -430,13 +450,16 @@ def main() -> None:
                 row = future.result()
                 rows.append(row)
                 write_row(csv_path, row)
+                if best is None or row['score'] < best['score']:
+                    best = row
+                best_path.write_text(json.dumps(best, indent=2))
+                export_best_config(best, settings, out_dir)
                 progress.set_postfix(
                     trial=f'{row["trial"]:03d}',
                     score=f'{row["score"]:.4f}',
+                    best=f'{best["score"]:.4f}',
                 )
 
-    best = min(rows, key=lambda row: row['score'])
-    best_path.write_text(json.dumps(best, indent=2))
     export_path = export_best_config(best, settings, out_dir)
     print(f'Best trial: {best["trial"]:03d}')
     print(f'Best score: {best["score"]:.4f}')

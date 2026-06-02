@@ -12,6 +12,8 @@ max_trials: null
 out_dir: sweeps/results
 export_best: sweeps/sequential_best.yml
 export_on_complete: true
+task_order: random
+task_order_seed: null
 
 # Evaluation. Larger n_eval stabilizes metrics but adds overhead.
 n_eval: 100
