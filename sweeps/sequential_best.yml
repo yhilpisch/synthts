@@ -1,0 +1,37 @@
+source:
+  result_dir: sweeps/results/sequential_20260528_134801
+  trial: 22
+  score: -0.05082507982962525
+data:
+  symbol: GLD
+model:
+  seq_len: 63
+  latent_dim: 8
+  noise_dim: 4
+  hu_gen: 96
+  hu_disc: 64
+training:
+  epochs: 750
+  batch_size: 256
+  lr_d: 0.0001
+  lr_g: 0.0003
+  label_smooth: 0.1
+  n_gen_steps: 2
+  stat_weight: 3.0
+  stat_max_lag: 5
+  seed: 121
+  log_interval: 500
+generation:
+  n_sequences: 100
+  seed: 10121
+  window_seed: 20121
+metrics:
+  score: -0.05082507982962525
+  ks_stat: 0.06031746031746032
+  ks_pass_rate: 0.78
+  acf_diff: 0.2715913280546449
+  acf2_diff: 0.19677640296327673
+  real_mean: 0.0007293869531369377
+  synth_mean: 0.0004913739394396544
+  real_std: 0.008918266430352241
+  synth_std: 0.00977487675845623

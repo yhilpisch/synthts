@@ -172,6 +172,7 @@ models/
 figures/generated/
 figures/cache/
 results/generated/
+sweeps/results/
 output/
 outputs/
 reports/

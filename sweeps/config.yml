@@ -1,0 +1,34 @@
+# Sequential GAN sweep configuration.
+
+# Data and reproducibility.
+symbol: GLD
+seed: 100
+seq_len: 63
+
+# Runtime. For Apple Silicon, keep torch_threads at 1 when n_jobs > 1.
+n_jobs: 3
+torch_threads: 1
+max_trials: null
+out_dir: sweeps/results
+export_best: sweeps/sequential_best.yml
+export_on_complete: true
+
+# Evaluation. Larger n_eval stabilizes metrics but adds overhead.
+n_eval: 100
+
+# Fixed model/training parameters.
+latent_dim: 8
+noise_dim: 4
+lr_d: 0.0001
+n_gen_steps: 2
+stat_max_lag: 5
+
+# Sweep grid. This default grid has 24 trials:
+# 2 hu_gen * 1 hu_disc * 2 batch sizes * 2 lr_g values *
+# 3 stat weights * 1 epoch setting.
+hu_gen_values: [64, 96]
+hu_disc_values: [64]
+batch_size_values: [128, 256]
+lr_g_values: [0.0002, 0.0003]
+stat_weight_values: [3.0, 5.0, 7.5]
+epochs_values: [750]

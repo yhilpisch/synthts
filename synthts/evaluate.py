@@ -175,8 +175,8 @@ def compare_acf(real: np.ndarray, synth: np.ndarray,
     a2_real = acf(real ** 2, max_lag)
     a2_synth = acf(synth ** 2, max_lag)
     return {
-        'acf_diff': np.abs(a_real - a_synth).sum(),
-        'acf2_diff': np.abs(a2_real - a2_synth).sum(),
+        'acf_diff': np.abs(a_real[1:] - a_synth[1:]).sum(),
+        'acf2_diff': np.abs(a2_real[1:] - a2_synth[1:]).sum(),
         'real_acf': a_real,
         'synth_acf': a_synth,
         'real_acf2': a2_real,
@@ -198,8 +198,8 @@ def compare_acf_windows(real_windows: np.ndarray,
     a2_real = average_acf(real_windows ** 2, max_lag)
     a2_synth = average_acf(synth_windows ** 2, max_lag)
     return {
-        'acf_diff': np.abs(a_real - a_synth).sum(),
-        'acf2_diff': np.abs(a2_real - a2_synth).sum(),
+        'acf_diff': np.abs(a_real[1:] - a_synth[1:]).sum(),
+        'acf2_diff': np.abs(a2_real[1:] - a2_synth[1:]).sum(),
         'real_acf': a_real,
         'synth_acf': a_synth,
         'real_acf2': a2_real,
@@ -244,16 +244,16 @@ def plot_acf_comparison(real: np.ndarray, synth: np.ndarray,
     """Side-by-side ACF and squared-return ACF comparison."""
     comp = compare_acf(real, synth, max_lag)
     fig, axes = plt.subplots(1, 2, figsize=(10, 3))
-    lags = np.arange(max_lag + 1)
-    axes[0].bar(lags - 0.15, comp['real_acf'], width=0.3,
+    lags = np.arange(1, max_lag + 1)
+    axes[0].bar(lags - 0.15, comp['real_acf'][1:], width=0.3,
                 color='r', alpha=0.7, label='real')
-    axes[0].bar(lags + 0.15, comp['synth_acf'], width=0.3,
+    axes[0].bar(lags + 0.15, comp['synth_acf'][1:], width=0.3,
                 color='b', alpha=0.7, label='synthetic')
     axes[0].set_title('Return ACF')
     axes[0].legend()
-    axes[1].bar(lags - 0.15, comp['real_acf2'], width=0.3,
+    axes[1].bar(lags - 0.15, comp['real_acf2'][1:], width=0.3,
                 color='r', alpha=0.7, label='real')
-    axes[1].bar(lags + 0.15, comp['synth_acf2'], width=0.3,
+    axes[1].bar(lags + 0.15, comp['synth_acf2'][1:], width=0.3,
                 color='b', alpha=0.7, label='synthetic')
     axes[1].set_title('Squared-return ACF')
     axes[1].legend()
@@ -266,16 +266,16 @@ def plot_acf_window_comparison(real_windows: np.ndarray,
     """Side-by-side average ACF comparison for return windows."""
     comp = compare_acf_windows(real_windows, synth_windows, max_lag)
     fig, axes = plt.subplots(1, 2, figsize=(10, 3))
-    lags = np.arange(max_lag + 1)
-    axes[0].bar(lags - 0.15, comp['real_acf'], width=0.3,
+    lags = np.arange(1, max_lag + 1)
+    axes[0].bar(lags - 0.15, comp['real_acf'][1:], width=0.3,
                 color='r', alpha=0.7, label='real')
-    axes[0].bar(lags + 0.15, comp['synth_acf'], width=0.3,
+    axes[0].bar(lags + 0.15, comp['synth_acf'][1:], width=0.3,
                 color='b', alpha=0.7, label='synthetic')
     axes[0].set_title('Return ACF')
     axes[0].legend()
-    axes[1].bar(lags - 0.15, comp['real_acf2'], width=0.3,
+    axes[1].bar(lags - 0.15, comp['real_acf2'][1:], width=0.3,
                 color='r', alpha=0.7, label='real')
-    axes[1].bar(lags + 0.15, comp['synth_acf2'], width=0.3,
+    axes[1].bar(lags + 0.15, comp['synth_acf2'][1:], width=0.3,
                 color='b', alpha=0.7, label='synthetic')
     axes[1].set_title('Squared-return ACF')
     axes[1].legend()
