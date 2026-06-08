@@ -1,4 +1,4 @@
-# TimeGAN sweep configuration — path-realism emphasis.
+# TimeGAN sweep configuration — temporal-dependence follow-up.
 
 symbol: GLD
 seed: 100
@@ -38,8 +38,8 @@ std_weight: 1.0
 central_quantile_weight: 1.0
 tail_quantile_weight: 2.0
 acf_weight: 1.0
-abs_acf_weight: 1.0
-squared_acf_weight: 2.0
+abs_acf_weight: 2.0
+squared_acf_weight: 3.0
 terminal_quantile_weight: 3.0
 drawdown_quantile_weight: 3.0
 
@@ -61,13 +61,13 @@ grid_keys:
   - stat_max_lag_values
   - joint_epochs_values
 
-hidden_units_values: [96, 128]
+hidden_units_values: [128]
 latent_dim_values: [24, 32]
-noise_dim_values: [16, 32]
+noise_dim_values: [32]
 batch_size_values: [128]
 lr_values: [0.0003, 0.0005]
 supervisor_weight_values: [50.0, 100.0]
 moment_weight_values: [50.0]
 stat_weight_values: [10.0, 25.0]
-stat_max_lag_values: [10]
-joint_epochs_values: [1500]
+stat_max_lag_values: [10, 20]
+joint_epochs_values: [2000]
