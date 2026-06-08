@@ -6,7 +6,7 @@ seq_len: 63
 
 n_jobs: 3
 torch_threads: 1
-max_trials: null
+max_trials: 24
 out_dir: sweeps/results
 export_best: sweeps/timegan_best.yml
 export_on_complete: true
@@ -62,12 +62,12 @@ grid_keys:
   - joint_epochs_values
 
 hidden_units_values: [96, 128]
-latent_dim_values: [24, 32, 48]
+latent_dim_values: [24, 32]
 noise_dim_values: [16, 32]
 batch_size_values: [128]
-lr_values: [0.0002, 0.0003, 0.0005]
-supervisor_weight_values: [25.0, 50.0, 100.0]
-moment_weight_values: [25.0, 50.0]
-stat_weight_values: [10.0, 25.0, 50.0]
-stat_max_lag_values: [10, 20]
-joint_epochs_values: [1500, 3000]
+lr_values: [0.0003, 0.0005]
+supervisor_weight_values: [50.0, 100.0]
+moment_weight_values: [50.0]
+stat_weight_values: [10.0, 25.0]
+stat_max_lag_values: [10]
+joint_epochs_values: [1500]
