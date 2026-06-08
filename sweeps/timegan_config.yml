@@ -1,4 +1,4 @@
-# TimeGAN sweep configuration.
+# TimeGAN sweep configuration — path-realism emphasis.
 
 symbol: GLD
 seed: 100
@@ -21,6 +21,34 @@ num_layers: 1
 gamma: 1.0
 recon_weight: 10.0
 
+# Checkpoint scoring
+checkpoint_interval: 200
+
+# LR scheduling
+lr_schedule: cosine
+
+# Observation discriminator
+obs_disc_channels: 32
+obs_disc_layers: 2
+obs_adv_weight: 1.0
+
+# Modular financial loss weights
+mean_weight: 1.0
+std_weight: 1.0
+central_quantile_weight: 1.0
+tail_quantile_weight: 2.0
+acf_weight: 1.0
+abs_acf_weight: 1.0
+squared_acf_weight: 2.0
+terminal_quantile_weight: 3.0
+drawdown_quantile_weight: 3.0
+
+# Latent activation
+latent_activation: layernorm
+
+embedding_epochs: 500
+supervisor_epochs: 500
+
 grid_keys:
   - hidden_units_values
   - latent_dim_values
@@ -33,15 +61,13 @@ grid_keys:
   - stat_max_lag_values
   - joint_epochs_values
 
-embedding_epochs: 500
-supervisor_epochs: 500
-hidden_units_values: [64, 96]
-latent_dim_values: [16, 24]
-noise_dim_values: [8, 16]
+hidden_units_values: [96, 128]
+latent_dim_values: [24, 32, 48]
+noise_dim_values: [16, 32]
 batch_size_values: [128]
-lr_values: [0.0005, 0.001]
-supervisor_weight_values: [50.0, 100.0]
-moment_weight_values: [50.0, 100.0]
-stat_weight_values: [5.0, 10.0]
-stat_max_lag_values: [10]
-joint_epochs_values: [750]
+lr_values: [0.0002, 0.0003, 0.0005]
+supervisor_weight_values: [25.0, 50.0, 100.0]
+moment_weight_values: [25.0, 50.0]
+stat_weight_values: [10.0, 25.0, 50.0]
+stat_max_lag_values: [10, 20]
+joint_epochs_values: [1500, 3000]

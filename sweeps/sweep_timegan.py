@@ -37,6 +37,7 @@ from synthts.timegan import (
     TimeGANDiscriminator,
     TimeGANEmbedder,
     TimeGANGenerator,
+    TimeGANObsDiscriminator,
     TimeGANRecovery,
     TimeGANSupervisor,
     generate_timegan_sequences,
@@ -59,16 +60,38 @@ DEFAULT_CONFIG = {
     'supervisor_epochs': 500,
     'gamma': 1.0,
     'recon_weight': 10.0,
-    'hidden_units_values': [64, 96],
-    'latent_dim_values': [16, 24],
-    'noise_dim_values': [8],
+    # Checkpoint scoring
+    'checkpoint_interval': 200,
+    # LR scheduling
+    'lr_schedule': 'cosine',
+    # Observation discriminator
+    'obs_disc_channels': 32,
+    'obs_disc_layers': 2,
+    'obs_adv_weight': 1.0,
+    # Modular financial loss weights
+    'mean_weight': 1.0,
+    'std_weight': 1.0,
+    'central_quantile_weight': 1.0,
+    'tail_quantile_weight': 2.0,
+    'acf_weight': 1.0,
+    'abs_acf_weight': 1.0,
+    'squared_acf_weight': 2.0,
+    'terminal_quantile_weight': 3.0,
+    'drawdown_quantile_weight': 3.0,
+    # Latent activation
+    'latent_activation': 'layernorm',
+    # Sweep grid
+    'hidden_units_values': [96, 128],
+    'latent_dim_values': [24, 32, 48],
+    'noise_dim_values': [16, 32],
     'batch_size_values': [128],
-    'lr_values': [0.0005, 0.001],
-    'supervisor_weight_values': [50.0, 100.0],
-    'moment_weight_values': [50.0, 100.0],
-    'stat_weight_values': [5.0, 10.0],
-    'stat_max_lag_values': [10],
-    'joint_epochs_values': [750],
+    'lr_values': [0.0002, 0.0003, 0.0005],
+    'supervisor_weight_values': [25.0, 50.0, 100.0],
+    'moment_weight_values': [25.0, 50.0],
+    'stat_weight_values': [10.0, 25.0, 50.0],
+    'stat_max_lag_values': [10, 20],
+    'joint_epochs_values': [1500, 3000],
+    # Output
     'out_dir': 'sweeps/results',
     'export_best': 'sweeps/timegan_best.yml',
     'export_on_complete': True,
@@ -99,6 +122,19 @@ class SweepConfig:
     stat_weight: float
     stat_max_lag: int
     joint_epochs: int
+    latent_activation: str
+    lr_schedule: str
+    checkpoint_interval: int
+    obs_adv_weight: float
+    mean_weight: float
+    std_weight: float
+    central_quantile_weight: float
+    tail_quantile_weight: float
+    acf_weight: float
+    abs_acf_weight: float
+    squared_acf_weight: float
+    terminal_quantile_weight: float
+    drawdown_quantile_weight: float
 
 
 def parse_values(value, kind=float) -> list:
@@ -150,6 +186,19 @@ def build_configs(settings: dict) -> list[SweepConfig]:
             stat_weight=stat_w,
             stat_max_lag=stat_lag,
             joint_epochs=joint_epochs,
+            latent_activation=settings['latent_activation'],
+            lr_schedule=settings['lr_schedule'],
+            checkpoint_interval=settings['checkpoint_interval'],
+            obs_adv_weight=settings['obs_adv_weight'],
+            mean_weight=settings['mean_weight'],
+            std_weight=settings['std_weight'],
+            central_quantile_weight=settings['central_quantile_weight'],
+            tail_quantile_weight=settings['tail_quantile_weight'],
+            acf_weight=settings['acf_weight'],
+            abs_acf_weight=settings['abs_acf_weight'],
+            squared_acf_weight=settings['squared_acf_weight'],
+            terminal_quantile_weight=settings['terminal_quantile_weight'],
+            drawdown_quantile_weight=settings['drawdown_quantile_weight'],
         ))
     if task_order == 'random':
         order_seed = settings.get('task_order_seed')
@@ -163,11 +212,14 @@ def build_configs(settings: dict) -> list[SweepConfig]:
 
 
 def score_metrics(row: dict) -> float:
-    """Composite score; lower is better."""
+    """Composite score emphasising path realism; lower is better."""
     return (
         row['mean_err_scaled'] + row['std_err_scaled']
-        + row['tail_err_scaled'] + row['acf_diff']
-        + row['acf2_diff'] + 10.0 * row['drawdown_mean_err']
+        + 2.0 * row['tail_err_scaled']
+        + row['acf_diff']
+        + 2.0 * row['acf2_diff']
+        + 3.0 * row['drawdown_mean_err']
+        + 3.0 * row['terminal_quantile_err']
         - row['ks_pass_rate']
     )
 
@@ -192,11 +244,13 @@ def run_trial(payload: tuple) -> dict:
     torch.manual_seed(config.seed)
     np.random.seed(config.seed)
 
+    act = config.latent_activation
     embedder = TimeGANEmbedder(
         input_dim=config.input_dim,
         hidden_units=config.hidden_units,
         latent_dim=config.latent_dim,
         num_layers=config.num_layers,
+        latent_activation=act,
     )
     recovery = TimeGANRecovery(
         latent_dim=config.latent_dim,
@@ -209,16 +263,23 @@ def run_trial(payload: tuple) -> dict:
         hidden_units=config.hidden_units,
         latent_dim=config.latent_dim,
         num_layers=config.num_layers,
+        latent_activation=act,
     )
     supervisor = TimeGANSupervisor(
         latent_dim=config.latent_dim,
         hidden_units=config.hidden_units,
         num_layers=config.num_layers,
+        latent_activation=act,
     )
     discriminator = TimeGANDiscriminator(
         latent_dim=config.latent_dim,
         hidden_units=config.hidden_units,
         num_layers=config.num_layers,
+    )
+    obs_discriminator = TimeGANObsDiscriminator(
+        input_dim=config.input_dim,
+        hidden_channels=32,
+        num_layers=2,
     )
 
     start = time.time()
@@ -226,6 +287,7 @@ def run_trial(payload: tuple) -> dict:
         history = train_timegan(
             embedder, recovery, generator, supervisor,
             discriminator, rets_scaled,
+            obs_discriminator=obs_discriminator,
             seq_len=config.seq_len,
             embedding_epochs=config.embedding_epochs,
             supervisor_epochs=config.supervisor_epochs,
@@ -239,6 +301,18 @@ def run_trial(payload: tuple) -> dict:
             moment_weight=config.moment_weight,
             stat_weight=config.stat_weight,
             stat_max_lag=config.stat_max_lag,
+            lr_schedule=config.lr_schedule,
+            checkpoint_interval=config.checkpoint_interval,
+            obs_adv_weight=config.obs_adv_weight,
+            mean_weight=config.mean_weight,
+            std_weight=config.std_weight,
+            central_quantile_weight=config.central_quantile_weight,
+            tail_quantile_weight=config.tail_quantile_weight,
+            acf_weight=config.acf_weight,
+            abs_acf_weight=config.abs_acf_weight,
+            squared_acf_weight=config.squared_acf_weight,
+            terminal_quantile_weight=config.terminal_quantile_weight,
+            drawdown_quantile_weight=config.drawdown_quantile_weight,
             seed=config.seed,
             log_interval=config.joint_epochs + 1,
         )
@@ -269,9 +343,18 @@ def run_trial(payload: tuple) -> dict:
     q_real = np.quantile(real_flat, q)
     q_synth = np.quantile(synth_flat, q)
 
+    # Terminal cumulative-return quantile error
+    real_terminal = real_windows.sum(axis=1)
+    synth_terminal = synth_windows.sum(axis=1)
+    term_q_real = np.quantile(real_terminal, q)
+    term_q_synth = np.quantile(synth_terminal, q)
+    terminal_quantile_err = (np.abs(term_q_real - term_q_synth).mean()
+                             / real_std)
+
     row = asdict(config)
     row.update({
         'seconds': seconds,
+        'best_epoch': history.get('best_epoch', 0),
         'final_recon_loss': history['recon_loss'][-1],
         'final_supervised_loss': history['supervised_loss'][-1],
         'final_g_loss': history['g_loss'][-1],
@@ -294,7 +377,19 @@ def run_trial(payload: tuple) -> dict:
         'real_drawdown_mean': dd_real.mean(),
         'synth_drawdown_mean': dd_synth.mean(),
         'drawdown_mean_err': abs(dd_real.mean() - dd_synth.mean()),
+        'terminal_quantile_err': terminal_quantile_err,
     })
+    # Record final component losses
+    for name in ('mean', 'std', 'central_quantile', 'tail_quantile',
+                 'acf', 'abs_acf', 'squared_acf',
+                 'terminal_quantile', 'drawdown_quantile'):
+        key = f'{name}_loss'
+        if key in history:
+            row[f'final_{key}'] = history[key][-1]
+    if 'obs_d_loss' in history:
+        row['final_obs_d_loss'] = history['obs_d_loss'][-1]
+    if 'obs_adv_loss' in history:
+        row['final_obs_adv_loss'] = history['obs_adv_loss'][-1]
     row['score'] = score_metrics(row)
     return json_ready(row)
 
@@ -327,6 +422,7 @@ def build_notebook_config(best: dict, settings: dict,
             'latent_dim': int(best['latent_dim']),
             'noise_dim': int(best['noise_dim']),
             'num_layers': int(best['num_layers']),
+            'latent_activation': best['latent_activation'],
         },
         'training': {
             'embedding_epochs': int(best['embedding_epochs']),
@@ -340,6 +436,22 @@ def build_notebook_config(best: dict, settings: dict,
             'moment_weight': float(best['moment_weight']),
             'stat_weight': float(best['stat_weight']),
             'stat_max_lag': int(best['stat_max_lag']),
+            'lr_schedule': best['lr_schedule'],
+            'checkpoint_interval': int(best['checkpoint_interval']),
+            'obs_adv_weight': float(best['obs_adv_weight']),
+            'mean_weight': float(best['mean_weight']),
+            'std_weight': float(best['std_weight']),
+            'central_quantile_weight': float(
+                best['central_quantile_weight']),
+            'tail_quantile_weight': float(
+                best['tail_quantile_weight']),
+            'acf_weight': float(best['acf_weight']),
+            'abs_acf_weight': float(best['abs_acf_weight']),
+            'squared_acf_weight': float(best['squared_acf_weight']),
+            'terminal_quantile_weight': float(
+                best['terminal_quantile_weight']),
+            'drawdown_quantile_weight': float(
+                best['drawdown_quantile_weight']),
             'seed': int(best['seed']),
             'log_interval': 500,
         },
@@ -354,6 +466,9 @@ def build_notebook_config(best: dict, settings: dict,
             'ks_pass_rate': float(best['ks_pass_rate']),
             'acf_diff': float(best['acf_diff']),
             'acf2_diff': float(best['acf2_diff']),
+            'terminal_quantile_err': float(
+                best['terminal_quantile_err']),
+            'drawdown_mean_err': float(best['drawdown_mean_err']),
         },
     }
 

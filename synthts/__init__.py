@@ -14,6 +14,7 @@ from synthts.sequential import (  # noqa: F401
 )
 from synthts.timegan import (  # noqa: F401
     TimeGANEmbedder, TimeGANRecovery, TimeGANGenerator,
-    TimeGANSupervisor, TimeGANDiscriminator,
+    TimeGANSupervisor, TimeGANDiscriminator, TimeGANObsDiscriminator,
     train_timegan, generate_timegan_sequences,
+    compute_financial_losses,
 )
