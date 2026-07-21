@@ -16,7 +16,7 @@ clustering, and drawdown behaviour — enables rapid experimentation,
 backtesting, and pedagogical exploration without exposing sensitive market
 data.
 
-The project pursues this goal in three cumulative steps:
+The project pursues this goal in four cumulative steps:
 
 1. **Baseline** — a vanilla GAN learns the marginal distribution of
    i.i.d. log-returns. It establishes the training pipeline and
@@ -31,6 +31,11 @@ The project pursues this goal in three cumulative steps:
    *sequences* rather than scalar draws, capturing autocorrelation and
    volatility clustering — two core stylised facts that i.i.d. models
    miss.
+
+4. **TimeGAN** — a learned latent embedding, recovery map, supervisor,
+   and adversarial joint training produce paths that better reproduce
+   volatility clustering, drawdown dispersion, and tail risk than the
+   sequential GAN baseline.
 
 ## Quick Start
 
@@ -80,6 +85,29 @@ train_seq_gan(g, d, rets_.reshape(-1, 1),
 seqs = generate_sequences(g, 25, latent_dim=4)  # (25, 63, 1)
 ```
 
+### TimeGAN
+
+```python
+from synthts.timegan import (
+    TimeGANEmbedder, TimeGANRecovery, TimeGANGenerator,
+    TimeGANSupervisor, TimeGANDiscriminator,
+    train_timegan, generate_timegan_sequences,
+)
+
+e = TimeGANEmbedder(input_dim=1, hidden_units=128, latent_dim=24)
+r = TimeGANRecovery(latent_dim=24, hidden_units=128, output_dim=1)
+g = TimeGANGenerator(noise_dim=32, hidden_units=128, latent_dim=24)
+s = TimeGANSupervisor(latent_dim=24, hidden_units=128)
+d = TimeGANDiscriminator(latent_dim=24, hidden_units=128)
+
+train_timegan(e, r, g, s, d, rets_.reshape(-1, 1),
+              seq_len=63, batch_size=128,
+              embedding_epochs=500, supervisor_epochs=500,
+              joint_epochs=2000, noise_dim=32, seed=100)
+seqs = generate_timegan_sequences(g, s, r, n_sequences=100,
+                                   seq_len=63, noise_dim=32, seed=100)
+```
+
 ### Evaluation
 
 ```python
@@ -126,11 +154,20 @@ synthetic/
 │   ├── evaluate.py               # KS test, ACF, drawdown, plots
 │   ├── vanilla.py                # baseline GAN
 │   ├── wgangp.py                 # WGAN-GP
-│   └── sequential.py             # LSTM-based sequential GAN
+│   ├── sequential.py             # LSTM-based sequential GAN
+│   └── timegan.py                # TimeGAN model + training
 ├── notebooks/
-│   ├── 01_vanilla_gan.ipynb      # baseline notebook
+│   ├── 01_synthetic_gan.ipynb    # baseline notebook
 │   ├── 02_wgan_gp.ipynb          # WGAN-GP notebook
-│   └── 03_sequential.ipynb       # sequential generation notebook
+│   ├── 03_sequential.ipynb       # sequential generation notebook
+│   └── 04_timegan.ipynb          # TimeGAN notebook
+├── sweeps/
+│   ├── config.yml                # sequential sweep config
+│   ├── timegan_config.yml        # TimeGAN sweep config
+│   ├── count.py                  # combination counter
+│   ├── sweep_sequential.py
+│   ├── sweep_timegan.py
+│   └── results/                  # ignored sweep result directories
 ├── tests/
 │   ├── test_data.py
 │   ├── test_evaluate.py
@@ -138,9 +175,12 @@ synthetic/
 │   ├── test_vanilla_train.py
 │   ├── test_wgangp.py
 │   ├── test_sequential.py
+│   ├── test_timegan.py
 │   └── smoke_test.py
 ├── data/
 │   └── .gitkeep
+├── requirements.txt              # runtime dependencies
+├── requirements-dev.txt          # test dependencies (pytest)
 └── _ignore/                      # reference notebook (not tracked)
 ```
 
@@ -182,6 +222,20 @@ synthetic/
 | `train_seq_gan` | Sequential GAN training loop (overlapping windows) |
 | `generate_sequences` | Produce synthetic return sequences |
 
+### `synthts.timegan`
+
+| Symbol | Description |
+|--------|-------------|
+| `TimeGANEmbedder` | Map observed sequences into latent temporal states |
+| `TimeGANRecovery` | Map latent states back to observations |
+| `TimeGANGenerator` | Generate latent trajectories from per-step noise |
+| `TimeGANSupervisor` | Learn one-step latent dynamics |
+| `TimeGANDiscriminator` | Latent-space discriminator returning logits |
+| `TimeGANObsDiscriminator` | Optional observation-space CNN critic |
+| `train_timegan` | Staged TimeGAN training (embed, supervise, joint) |
+| `generate_timegan_sequences` | Produce synthetic return sequences |
+| `compute_financial_losses` | Dict of individually weighted financial losses |
+
 ### `synthts.evaluate`
 
 | Symbol | Description |
@@ -204,23 +258,25 @@ synthetic/
 
 ## Default Settings
 
-| Parameter | Vanilla | WGAN-GP | Sequential |
-|-----------|---------|---------|------------|
-| Hidden units | 32 / 24 | 32 | 64 |
-| Latent dim | 1 | 2 | 4 |
-| Sequence length | — | — | 63 (3-month) |
-| Batch size | 32 | 64 | 32 |
-| Epochs | 5001 | 10001 | 5001 |
-| LR (G) | 0.0001 | 0.0001 | 0.0001 |
-| LR (D/C) | 0.001 | 0.001 | 0.001 |
-| n_critic | — | 1 (SN+BCE) | — |
-| λ_GP | — | 10.0 (GP mode) | — |
-| Critic norm | — | Spectral norm | — |
-| LSTM layers | — | — | 2 |
-| Activation (G) | ReLU | ReLU | — |
-| Activation (D/C) | ReLU / Sigmoid | LeakyReLU / Sigmoid | Sigmoid (last) |
-| Optimiser betas | default | (0.5, 0.9) | default |
-| Seed | 100 | 100 | 100 |
+| Parameter | Vanilla | WGAN-GP | Sequential | TimeGAN |
+|-----------|---------|---------|------------|---------|
+| Hidden units | 32 / 24 | 32 | 64 | 128 |
+| Latent dim | 1 | 2 | 4 | 24 |
+| Noise dim | — | — | 2 | 32 |
+| Sequence length | — | — | 63 (3-month) | 63 (3-month) |
+| Batch size | 32 | 64 | 32 | 128 |
+| Epochs / joint | 5001 | 10001 | 5001 | 2000 (after 500 + 500) |
+| LR (G) | 0.0001 | 0.0001 | 0.0001 | 0.0005 |
+| LR (D/C) | 0.001 | 0.001 | 0.001 | 0.0005 (joint) |
+| n_critic | — | 1 (SN+BCE) | — | — |
+| λ_GP | — | 10.0 (GP mode) | — | — |
+| Critic norm | — | Spectral norm | Spectral norm (CNN) | Spectral norm (obs-D) |
+| LSTM / GRU layers | — | — | 2 | 1 (GRU) |
+| Activation (G) | ReLU | ReLU | — | tanh or layernorm |
+| Activation (D/C) | ReLU / Sigmoid | LeakyReLU / Sigmoid | Sigmoid (last) | — |
+| Optimiser betas | default | (0.5, 0.9) | default | default |
+| LR schedule | none | none | none | cosine (joint) |
+| Seed | 100 | 100 | 100 | 100 |
 
 ## Testing
 
@@ -230,13 +286,21 @@ pytest tests/ -v
 
 The test suite covers model shapes, gradient flow, training weight updates,
 round-trip scaling, statistical tests, all plotting functions, and
-end-to-end smoke tests. 89 tests currently pass.
+end-to-end smoke tests. 131 tests currently pass.
 
 ## Requirements
 
 - Python >= 3.10
 - `torch` >= 2.0
 - `numpy`, `pandas`, `scipy`, `scikit-learn`, `matplotlib`
+- `tqdm`, `pyyaml` (sweep CLI)
+
+Install pinned minimum versions with:
+
+```bash
+pip install -r requirements.txt
+pip install -r requirements-dev.txt   # adds pytest, pytest-cov
+```
 
 ## Author
 
