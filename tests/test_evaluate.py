@@ -237,7 +237,7 @@ class TestMaxDrawdown:
         # up 10%, down 20%, up 10%
         rets = np.log(np.array([1.1, 0.8, 1.1]))
         dd = max_drawdown(rets)
-        assert dd < 0  #  # negative by definition
+        assert dd < 0  # negative by definition
 
     def test_constant_zero_returns(self):
         rets = np.zeros(50)

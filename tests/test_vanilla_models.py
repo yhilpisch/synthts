@@ -21,10 +21,11 @@ class TestGenerator:
 
     def test_no_sigmoid_in_output(self):
         g = Generator()
-        z = torch.randn(100, 1)
-        out = g(z).detach().numpy()
-        # without sigmoid, output is unbounded
-        assert out.max() > 1.0 or out.min() < 0.0 or True  #  # trivially true
+        # Generator should not apply a Sigmoid on its final layer;
+        # Discriminator is the model that bounds outputs to [0, 1].
+        has_sigmoid = any(
+            isinstance(m, torch.nn.Sigmoid) for m in g.modules())
+        assert not has_sigmoid
 
     def test_parameters_are_trainable(self):
         g = Generator(hidden_units=8)
