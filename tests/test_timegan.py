@@ -11,6 +11,8 @@ from synthts.timegan import (
     TimeGANObsDiscriminator,
     TimeGANRecovery,
     TimeGANSupervisor,
+    _restore_models,
+    _snapshot_models,
     compute_financial_losses,
     generate_timegan_sequences,
     train_timegan,
@@ -30,8 +32,22 @@ class TestTimeGANModules:
         x = torch.randn(4, 12, 1)
         out = e(x)
         assert out.shape == (4, 12, 5)
-        # layernorm output is not clamped to [-1, 1]
-        assert out.abs().max() > 1.0 or True  # may or may not exceed 1
+        # LayerNorm output is unbounded; verify that normalised stats
+        # follow the expected mean ~ 0 across the latent axis.  The
+        # exact std depends on the GRU upstream weights so a loose
+        # bound is sufficient to confirm LayerNorm is wired in.
+        per_step_mean = out.mean(dim=-1).abs().max().item()
+        assert per_step_mean < 1e-4
+        # With mean=0 and unit std across 5 latent features, the
+        # output range must exceed 1.0 in absolute value at least
+        # once in the batch.
+        assert out.abs().max().item() > 1.0
+        # And mean/std must differ from the tanh variant on the same input.
+        e_tanh = TimeGANEmbedder(input_dim=1, hidden_units=8,
+                                 latent_dim=5,
+                                 latent_activation='tanh')
+        out_tanh = e_tanh(x)
+        assert not torch.allclose(out, out_tanh, atol=1e-4)
 
     def test_embedder_bad_activation(self):
         with pytest.raises(ValueError):
@@ -138,6 +154,43 @@ class TestFinancialLosses:
         losses = compute_financial_losses(x, x, max_lag=5)
         for name, val in losses.items():
             assert val.item() < 1e-5, f'{name} not near zero'
+
+    def test_identical_inputs_strictly_zero(self):
+        # All modular losses must be exactly zero on identical inputs
+        # rather than just "small"; this catches accidental abs() flips.
+        torch.manual_seed(7)
+        x = torch.randn(8, 30, 1)
+        losses = compute_financial_losses(x, x, max_lag=10)
+        for name, val in losses.items():
+            assert val.item() == 0.0, f'{name} not exactly zero'
+
+    def test_each_loss_is_nonnegative_and_finite(self):
+        # Every modular loss is built from squared or absolute
+        # differences, so it must be non-negative and finite on any
+        # well-shaped input.  This guards against accidental sign
+        # flips or NaN-producing branches introduced when refactoring
+        # the loss module.
+        torch.manual_seed(5)
+        real = torch.randn(16, 24, 1)
+        fake = torch.randn(16, 24, 1)
+        losses = compute_financial_losses(real, fake, max_lag=5)
+        for name, val in losses.items():
+            assert torch.isfinite(val), f'{name} is not finite'
+            assert val.item() >= 0.0, f'{name} is negative'
+
+    def test_at_least_one_loss_nonzero_on_perturbed_input(self):
+        # Apply an additive perturbation that breaks some of the
+        # affine invariants of variance/ACF losses.  At least one
+        # modular loss must register the perturbation, which proves
+        # the call chain reaches the scoring code.
+        torch.manual_seed(13)
+        real = torch.randn(16, 24, 1) * 1.5 + 0.7
+        perturbed = real * 2.4 - 0.3
+        losses = compute_financial_losses(real, perturbed, max_lag=5)
+        nz = sum(1 for v in losses.values() if v.item() > 0.0)
+        assert nz >= 5, (
+            f'expected most losses to react to the affine '
+            f'perturbation, only {nz}/9 did')
 
 
 class TestTrainTimeGAN:
@@ -306,3 +359,67 @@ class TestGenerateTimeGANSequences:
             noise_dim=3, seed=7,
         )
         assert np.allclose(seqs_1, seqs_2)
+
+
+class TestCheckpointRestore:
+    """Snapshot/restore must round-trip module weights exactly."""
+
+    def test_snapshot_round_trip(self):
+        torch.manual_seed(0)
+        e = TimeGANEmbedder(input_dim=1, hidden_units=8,
+                            latent_dim=5)
+        r = TimeGANRecovery(latent_dim=5, hidden_units=8,
+                            output_dim=1)
+        snap = _snapshot_models(e, r)
+        # mutate weights so we can detect restoration
+        with torch.no_grad():
+            for p in e.parameters():
+                p.add_(1.0)
+            for p in r.parameters():
+                p.add_(1.0)
+        _restore_models(snap, e, r)
+        for orig_key, orig_state in snap.items():
+            module = e if orig_key == 'TimeGANEmbedder' else r
+            for k, v in orig_state.items():
+                assert torch.equal(module.state_dict()[k], v)
+
+    def test_checkpoint_interval_records_best_epoch(self):
+        from synthts.data import ReturnScaler
+        np.random.seed(11)
+        rets = np.random.randn(120) * 0.01
+        data_scaled = ReturnScaler().fit_transform(rets)
+        e = TimeGANEmbedder(input_dim=1, hidden_units=8,
+                            latent_dim=5)
+        r = TimeGANRecovery(latent_dim=5, hidden_units=8,
+                            output_dim=1)
+        g = TimeGANGenerator(noise_dim=3, hidden_units=8,
+                             latent_dim=5)
+        s = TimeGANSupervisor(latent_dim=5, hidden_units=8)
+        d = TimeGANDiscriminator(latent_dim=5, hidden_units=8)
+        history = train_timegan(
+            e, r, g, s, d, data_scaled,
+            seq_len=10, embedding_epochs=5,
+            supervisor_epochs=5, joint_epochs=20,
+            batch_size=4, noise_dim=3, seed=7,
+            checkpoint_interval=5, log_interval=100,
+        )
+        # Checkpointing should register at least one evaluation.
+        assert history['val_score']
+        # val_score values are evaluated every checkpoint_interval
+        # joint epochs and have to align with epoch numbers.
+        n_joint_checkpoints = 20 // 5
+        assert len(history['val_score']) == n_joint_checkpoints
+        # best_epoch / best_val_score are recorded whenever the
+        # checkpoint path produced at least one finite val_score;
+        # tiny models occasionally overflow into NaN so we only
+        # assert structural invariants when at least one finite
+        # score was observed.
+        finite_scores = [v for v in history['val_score']
+                         if np.isfinite(v)]
+        if finite_scores:
+            assert 'best_epoch' in history
+            assert history['best_epoch'] > 0
+            assert np.isfinite(history['best_val_score'])
+            # Picked checkpoint must be a multiple of the
+            # checkpoint_interval (1-indexed).
+            assert history['best_epoch'] % 5 == 0

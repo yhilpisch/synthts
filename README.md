@@ -286,7 +286,7 @@ pytest tests/ -v
 
 The test suite covers model shapes, gradient flow, training weight updates,
 round-trip scaling, statistical tests, all plotting functions, and
-end-to-end smoke tests. 131 tests currently pass.
+end-to-end smoke tests. 136 tests currently pass.
 
 ## Requirements
 
