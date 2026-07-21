@@ -1,7 +1,7 @@
 source:
-  result_dir: sweeps/results/timegan_20260608_112957
-  trial: 45
-  score: 4.28445494041485
+  result_dir: sweeps/results/timegan_20260608_153424
+  trial: 13
+  score: 4.114824068360646
 data:
   symbol: GLD
 model:
@@ -16,12 +16,12 @@ model:
 training:
   embedding_epochs: 500
   supervisor_epochs: 500
-  joint_epochs: 1500
+  joint_epochs: 2000
   batch_size: 128
   lr: 0.0005
   gamma: 1.0
   recon_weight: 10.0
-  supervised_weight: 50.0
+  supervised_weight: 100.0
   moment_weight: 50.0
   stat_weight: 10.0
   stat_max_lag: 10
@@ -33,21 +33,21 @@ training:
   central_quantile_weight: 1.0
   tail_quantile_weight: 2.0
   acf_weight: 1.0
-  abs_acf_weight: 1.0
-  squared_acf_weight: 2.0
+  abs_acf_weight: 2.0
+  squared_acf_weight: 3.0
   terminal_quantile_weight: 3.0
   drawdown_quantile_weight: 3.0
-  seed: 144
+  seed: 112
   log_interval: 500
 generation:
   n_sequences: 100
-  seed: 10144
-  window_seed: 20144
+  seed: 10112
+  window_seed: 20112
 metrics:
-  score: 4.28445494041485
-  ks_stat: 0.07873015873015873
-  ks_pass_rate: 0.81
-  acf_diff: 1.1612653007618574
-  acf2_diff: 0.4384402517000665
-  terminal_quantile_err: 0.8060601736230785
-  drawdown_mean_err: 0.022371969525441154
+  score: 4.114824068360646
+  ks_stat: 0.051587301587301584
+  ks_pass_rate: 0.87
+  acf_diff: 0.8541431166526687
+  acf2_diff: 0.32000809842461386
+  terminal_quantile_err: 1.0084772563349345
+  drawdown_mean_err: 0.00801897470465851
