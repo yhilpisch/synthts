@@ -4,7 +4,20 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from synthts.data import compute_log_returns, ReturnScaler
+from synthts.data import ReturnScaler, compute_log_returns, load_eod
+
+
+def test_load_eod_drops_only_selected_symbol_gaps(monkeypatch):
+    raw = pd.DataFrame(
+        {
+            'GLD': [100.0, 101.0],
+            'SPY': [np.nan, 200.0],
+        },
+        index=pd.date_range('2026-01-01', periods=2),
+    )
+    monkeypatch.setattr(pd, 'read_csv', lambda *args, **kwargs: raw)
+    result = load_eod(symbol='GLD')
+    assert len(result) == 2
 
 
 # ------------------------------------------------------------------
@@ -23,10 +36,15 @@ class TestComputeLogReturns:
         rets = compute_log_returns(prices)
         assert len(rets) == len(prices) - 1
 
-    def test_no_nan(self):
+    def test_zero_price_raises(self):
         prices = pd.Series([100, 101, 0, 102])  # zero price
+        with pytest.raises(ValueError, match='strictly positive'):
+            compute_log_returns(prices)
+
+    def test_missing_price_is_dropped(self):
+        prices = pd.Series([100, 101, np.nan, 102])
         rets = compute_log_returns(prices)
-        assert not np.any(np.isnan(rets))
+        assert np.isfinite(rets).all()
 
     def test_values_are_log_returns(self):
         prices = pd.Series([100.0, 105.0, 110.25])

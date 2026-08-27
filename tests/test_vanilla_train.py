@@ -4,7 +4,12 @@ import numpy as np
 import torch
 import pytest
 
-from synthts.vanilla import Generator, Discriminator, train_gan, generate_samples
+from synthts.vanilla import (
+    Discriminator,
+    Generator,
+    generate_samples,
+    train_gan,
+)
 
 
 @pytest.fixture()

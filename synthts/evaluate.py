@@ -14,7 +14,7 @@ def ks_test(real: np.ndarray, synth: np.ndarray) -> dict:
     dict
         Keys 'statistic', 'pvalue'.
     """
-    result = stats.kstest(synth, real)
+    result = stats.ks_2samp(real, synth, method='asymp')
     return {'statistic': result.statistic, 'pvalue': result.pvalue}
 
 
@@ -224,11 +224,13 @@ def drawdown_distribution(returns: np.ndarray,
     for each.
     """
     from numpy.random import default_rng
+    if len(returns) < 2:
+        raise ValueError('returns must contain at least two observations')
     rng = default_rng(rng_seed)
     window = min(252, len(returns) // 2)
     dds = []
     for _ in range(n_bootstrap):
-        start = rng.integers(0, len(returns) - window)
+        start = rng.integers(0, len(returns) - window + 1)
         segment = returns[start:start + window]
         dds.append(max_drawdown(segment))
     return np.array(dds)

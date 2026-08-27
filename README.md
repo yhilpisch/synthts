@@ -3,7 +3,7 @@
 <img src="https://hilpisch.com/tpq_logo.png" alt="The Python Quants" width="35%" align="right" border="0">
 
 **syntheticts** generates realistic synthetic financial time series using
-generative adversarial networks. The library ships three progressive
+generative adversarial networks. The library ships four progressive
 approaches under one package (`synthts`), each with its own models,
 training loop, dedicated notebook, and test suite.
 
@@ -22,10 +22,10 @@ The project pursues this goal in four cumulative steps:
    i.i.d. log-returns. It establishes the training pipeline and
    evaluation framework but cannot reproduce temporal dynamics.
 
-2. **Stabilised training** — replacing the discriminator with a
-   Wasserstein critic plus gradient penalty (WGAN-GP) eliminates mode
-   collapse, yields a smooth loss curve, and produces higher-quality
-   marginal samples.
+2. **Stabilised training** — a spectral-normalised critic with binary
+   cross-entropy is the low-dimensional default, while a multi-critic mode
+   uses Wasserstein loss with gradient penalty (WGAN-GP). Both configurations
+   are designed to reduce training instability and mode collapse.
 
 3. **Sequential generation** — an LSTM-based generator produces return
    *sequences* rather than scalar draws, capturing autocorrelation and
@@ -33,9 +33,8 @@ The project pursues this goal in four cumulative steps:
    miss.
 
 4. **TimeGAN** — a learned latent embedding, recovery map, supervisor,
-   and adversarial joint training produce paths that better reproduce
-   volatility clustering, drawdown dispersion, and tail risk than the
-   sequential GAN baseline.
+   and adversarial joint training target volatility clustering, drawdown
+   dispersion, and tail risk beyond the sequential GAN baseline.
 
 ## Quick Start
 
@@ -256,24 +255,27 @@ synthetic/
 | `plot_acf_comparison` | Side-by-side ACF and squared-return ACF |
 | `plot_drawdown_comparison` | Max-drawdown bootstrap histogram overlay |
 
-## Default Settings
+## Illustrative Training Settings
+
+These are the notebook and quick-start configurations. Some API defaults are
+lighter to keep tests and small experiments practical.
 
 | Parameter | Vanilla | WGAN-GP | Sequential | TimeGAN |
 |-----------|---------|---------|------------|---------|
-| Hidden units | 32 / 24 | 32 | 64 | 128 |
+| Hidden units | 32/24 | 32 | 64 | 128 |
 | Latent dim | 1 | 2 | 4 | 24 |
 | Noise dim | — | — | 2 | 32 |
 | Sequence length | — | — | 63 (3-month) | 63 (3-month) |
 | Batch size | 32 | 64 | 32 | 128 |
-| Epochs / joint | 5001 | 10001 | 5001 | 2000 (after 500 + 500) |
+| Epochs/joint | 5001 | 10001 | 5001 | 2000 (after 500 + 500) |
 | LR (G) | 0.0001 | 0.0001 | 0.0001 | 0.0005 |
 | LR (D/C) | 0.001 | 0.001 | 0.001 | 0.0005 (joint) |
 | n_critic | — | 1 (SN+BCE) | — | — |
 | λ_GP | — | 10.0 (GP mode) | — | — |
 | Critic norm | — | Spectral norm | Spectral norm (CNN) | Spectral norm (obs-D) |
-| LSTM / GRU layers | — | — | 2 | 1 (GRU) |
+| LSTM/GRU layers | — | — | 2 | 1 (GRU) |
 | Activation (G) | ReLU | ReLU | — | tanh or layernorm |
-| Activation (D/C) | ReLU / Sigmoid | LeakyReLU / Sigmoid | Sigmoid (last) | — |
+| Activation (D/C) | ReLU/Sigmoid | LeakyReLU/Sigmoid | Sigmoid (last) | — |
 | Optimiser betas | default | (0.5, 0.9) | default | default |
 | LR schedule | none | none | none | cosine (joint) |
 | Seed | 100 | 100 | 100 | 100 |
@@ -286,7 +288,7 @@ pytest tests/ -v
 
 The test suite covers model shapes, gradient flow, training weight updates,
 round-trip scaling, statistical tests, all plotting functions, and
-end-to-end smoke tests. 136 tests currently pass.
+end-to-end smoke tests. 139 tests currently pass.
 
 ## Requirements
 
@@ -308,8 +310,8 @@ Dr. Yves J. Hilpisch — [https://tpq.io](https://tpq.io) |
 [@dyjh](https://twitter.com/dyjh) |
 [team@tpq.io](mailto:team@tpq.io)
 
-Research, structuring, drafting, and visualizations were assisted by
-GPT 5.x as a co-writing tool under human direction.
+Research, structuring, drafting, and visualizations were assisted by different
+LLMs as co-writing tools under human direction.
 
 ## Disclaimer
 

@@ -26,8 +26,8 @@ def load_eod(url: str=EOD_URL, symbol: str='GLD',
     pd.Series
         Price series indexed by date.
     """
-    raw = pd.read_csv(url, index_col=0, parse_dates=True).dropna()
-    series = raw[symbol]
+    raw = pd.read_csv(url, index_col=0, parse_dates=True)
+    series = raw[symbol].dropna()
     if n_obs is not None:
         series = series.iloc[-n_obs:]
     return series
@@ -39,8 +39,11 @@ def compute_log_returns(prices: pd.Series) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        1-D array of log-returns (NaN-free).
+        1-D array of finite log-returns.
     """
+    observed = prices.dropna()
+    if not np.isfinite(observed).all() or (observed <= 0).any():
+        raise ValueError('prices must be finite and strictly positive')
     rets = np.log(prices / prices.shift(1)).dropna()
     return rets.values
 

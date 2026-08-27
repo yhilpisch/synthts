@@ -255,6 +255,10 @@ class TestDrawdownDistribution:
         dds = drawdown_distribution(rets, n_bootstrap=50, rng_seed=0)
         assert (dds <= 0).all()
 
+    def test_requires_two_observations(self):
+        with pytest.raises(ValueError, match='at least two'):
+            drawdown_distribution(np.array([0.01]))
+
 
 class TestTemporalPlots:
     @pytest.fixture(autouse=True)
