@@ -1,188 +1,67 @@
-# Publication Readiness Review
+# Remaining Publication Work
 
-Reviewed 2026-10-27 against local commit `264ce11`. Scope: inventory,
-source inspection, executable quality checks, and the GitHub/PyPI release
-path. Implementation is in progress; only unresolved findings remain below.
-The numerical correction stage now has regression coverage.
-Remove resolved items after their acceptance checks pass.
+Updated 2026-10-27. The distribution/import name is **synthts**; candidate
+version **0.1.0** is prepared locally. Only unresolved work is listed below.
 
-**Assessment:** a working research codebase, but not yet an installable
-distribution. Packaging and reproducibility work remains before release.
-Resolve the release blockers before publishing a first package version.
+The maintained inventory comprises ten package modules, four notebooks,
+research sweep/configuration utilities, regression/example/CLI tests,
+standard packaging metadata, archive inspection scripts, contribution/release
+instructions, and CI/Trusted Publishing workflows. Historical selected YAML
+and ignored research runs are preserved. New sweeps retain exact input CSVs,
+metadata/checksums, validation results, and all trial inference bundles.
 
-## Current inventory
+## Publication decisions and external setup
 
-The repository contains 35 tracked files. The following components form the
-maintained package and its supporting examples.
+The licence and GitHub owner/repository are not yet specified. Add the
+chosen `LICENSE`, SPDX licence metadata, and Source/Issues URLs before
+publication. Confirm PyPI/TestPyPI name ownership, configure the remote and
+Trusted Publishers/environments, and rehearse the release from the same
+commit/tag intended for production. No remote, tag, push, or upload has been
+performed. The archive publication gate deliberately fails while licence or
+repository metadata is absent. See `RELEASE.md` for the concrete procedure.
 
-| Component | Contents and publication implications |
-|---|---|
-| Import package | `synthts`: seven modules, including `__init__.py`; explicit top-level exports; no package version. |
-| Data utilities | CSV price loading, log-return calculation, and standardisation/inversion. |
-| Generators | Dense vanilla GAN; spectral-normalised BCE/Wasserstein-GP alternatives; LSTM sequential GAN with CNN discriminator; extended TimeGAN with modular financial losses and optional observation discriminator. |
-| Evaluation | Marginal statistics, KS diagnostics, return/squared-return ACFs, window comparisons, drawdown statistics, and Matplotlib plots. |
-| Examples | Four notebooks. The first three have no stored outputs; TimeGAN has 16 output objects, including six embedded PNGs. |
-| Sweep utilities | Two training CLIs, a combination counter, two grid configurations, and three selected/reference configurations. Sequential grid: 24 trials; TimeGAN grid: 32 combinations capped at 24. |
-| Tests | Eight test-bearing files plus `tests/__init__.py`; 139 collected tests. |
-| Automation | One GitHub Actions workflow testing checkout imports on Linux/Python 3.10–3.12. No distribution build or release workflow. |
-| Documentation/dependencies | README, review ledger, runtime and development requirements. No licence, changelog, release instructions, or build metadata. |
-| Local research material | Ignored `_ignore/` contains two reference files. Ignored `sweeps/results/` contains 24 run directories/62 files. Preserve these; they are not present in a fresh clone. |
-| Git state | Clean at audit start; local `main`, no configured remote, no tags. `git fsck --no-dangling` completed without findings. |
+## Canonical data and empirical evidence
 
-## Release blockers
+Select the canonical real-data snapshot/run and establish source institution,
+price definitions/adjustments, and redistribution terms. The snapshot pipeline
+records provenance but cannot infer those rights or certify historical inputs.
+Existing selected/reference metrics remain historical in-sample observations.
 
-These items prevent a reliable first release or undermine its documented
-behaviour. Each requires a focused regression or release check.
+Before comparative financial claims, run predeclared fixed-budget/multi-seed
+experiments with training-only scaling, held-out validation/test periods,
+resampling baselines, and dependence-aware uncertainty. The code now supports
+these splits and retains portable inference contracts. Full training and
+historical-result reproduction have not been performed. Cleared notebook
+outputs must be refreshed from an explicitly identified run if published
+empirical results are desired. The package documentation makes no benchmark
+superiority claim.
 
-### 1. Establish distribution identity, licensing, and packaging
+## Validation still to run externally
 
-There is no `pyproject.toml`, `setup.py`, or `setup.cfg`.
-`pip wheel --no-deps --no-build-isolation .` fails because the directory is
-not installable. The README uses `SyntheticTS`/`syntheticts`, whereas Python
-imports use `synthts`; the distribution name has not been established in
-metadata. PyPI name availability and account ownership were not checked.
+Hosted GitHub Actions, the Python 3.10/3.11 jobs, declared runtime-minimum
+combinations, TestPyPI installation, and production publication have not run
+in this session. The workflows are configured; YAML parsing is not evidence
+that hosted jobs have passed. GPU behaviour has not been validated.
 
-Choose the distribution name, first version, licence, and GitHub destination.
-Add a build backend and metadata covering Python support, dependencies,
-README, licence, author, and project URLs. Explicitly select package contents
-so flat-layout discovery cannot accidentally include tests, sweep utilities,
-or local research material. A copyright notice/disclaimer is not a licence.
-Keep runtime requirements and package metadata consistent; consider moving
-sweep-only dependencies into an optional extra.
+## Local validation baseline
 
-Acceptance: build both wheel and source distribution, run `twine check`,
-inspect archive contents, rebuild from the source distribution, and test
-imports/examples from an installed wheel outside the checkout. Do not
-require a directory reorganisation solely to add packaging.
+- Workspace interpreter: `/Users/yves/Temp/pyai/bin/python`, Python 3.12.12.
+  **185 tests passed**, with **98% statement coverage**; Ruff and source/diff
+  checks passed. This includes all four notebooks and every README Python
+  example on deterministic local inputs with reduced training budgets.
+- Serial TimeGAN and two-worker sequential sweep CLI checks pass. Exact input
+  snapshot checksums, chronological partitions, selected-setting exports,
+  and inference save/load equivalence are checked.
+- Wheel/source distribution build, `twine check`, and archive-content
+  inspection pass. The wheel contains only `synthts` and its metadata;
+  source archives exclude local runs, datasets, and notebook checkpoints.
+- A fresh temporary environment installed the candidate wheel and current
+  resolved dependencies. The offline README example and **180 installed
+  package/notebook tests passed outside the checkout**; repository-only
+  sweep tests run separately in the checkout. `pip check` found no conflicts.
+  This environment resolved NumPy 2.5.4, pandas 3.1.0, SciPy 1.18.1,
+  scikit-learn 1.9.1, Matplotlib 3.11.2, and Torch 2.14.1. The shared `pyai`
+  environment was not changed.
 
-### 6. Align TimeGAN sweep configuration and notebook execution
-
-`04_timegan.ipynb` reads `timegan_best.yml` but ignores the selected
-`latent_activation`, scheduler, checkpoint interval, modular loss weights,
-and observation discriminator. The selected configuration specifies
-`layernorm`; the notebook constructs the default `tanh` models and omits
-the observation discriminator entirely. Its outputs therefore cannot be
-treated as a reproduction of the selected sweep trial.
-
-The sweep itself exposes `obs_disc_channels`/`obs_disc_layers` in defaults
-and YAML but hardcodes 32/two layers in `run_trial`; the notebook export
-also omits that architecture. Make the configuration contract complete
-across construction, training, export, and notebook loading. Test a
-non-default round trip and refresh stored outputs only after alignment.
-
-### 7. Repair public examples and objective descriptions
-
-The README sequential example raises `TypeError`: `SeqDiscriminator` has
-no `num_layers` argument. Its reference table also describes that CNN as
-an LSTM discriminator. The tree refers to nonexistent `OUTLINE.md`.
-The settings table differs from the configurations actually loaded by
-the notebooks; clarify whether it describes an explicit example or API
-defaults. Requirements are lower bounds/ranges, not pinned environments.
-
-`02_wgan_gp.ipynb` advertises Wasserstein gradient-penalty training but
-explicitly uses `n_critic=1`, which selects spectral-normalised BCE.
-README/reference/docstring descriptions need to distinguish these modes
-consistently. Preserve the intentional dual-mode implementation unless an
-API change is explicitly chosen. Explain that an `epoch` here is one
-sampled minibatch update, not a full pass through the data.
-
-Execute every advertised example at a reduced training budget against the
-installed package. The first two notebooks and README seed the training
-loop after model construction; seed before construction as well when
-claiming reproducibility. Add a clear installation path and a short offline
-example before asking users to run thousands of training steps.
-
-## Publication evidence and reproducibility
-
-The original review's long-run validation and data-provenance concerns
-remain relevant, with the following concrete requirements.
-
-### 8. Complete publication benchmarks
-
-Sweep selection now uses chronological validation returns, preprocessing is
-fit on training data only, and a final test partition is reserved. All
-configurations share a seed for comparable selection; repeat entire grids
-under several predeclared seeds for publication evidence. TimeGAN accepts
-held-out validation data and uses fixed scoring noise without consuming
-the training random stream.
-
-Fixed-budget multi-seed comparisons, dependence-aware uncertainty, and
-resampling baselines remain to be run on an identified frozen real dataset.
-Historical scores remain in-sample observations and must not be promoted
-as evidence for the corrected protocol.
-
-### 9. Establish canonical real-data provenance
-
-Sweeps now accept a local CSV, retain exact input bytes plus a same-stem
-metadata sidecar, and record SHA-256, retrieval time, symbol, date range,
-split boundaries, transformations, and dependency versions. They persist
-all trial components, constructor settings, and preprocessing as portable
-inference bundles; save/load equivalence is tested. These are not resumable
-optimiser checkpoints. Result directories are unique and exports into
-tracked selected YAML require explicit opt-in.
-
-Source institution, price adjustments, redistribution rights, and the
-canonical snapshot/run for publication still need to be established.
-Preserve all existing ignored runs and the three historical selected/reference
-YAML files; their recorded metrics have not been reproduced or replaced.
-
-## Additional quality work
-
-These items should be addressed alongside release preparation, with scope
-kept proportional to the public API.
-
-### 11. Strengthen automation around actual release artefacts
-
-Keep the fast offline unit suite, but add the regressions above, sweep
-configuration/export checks, notebook/example smoke execution, and installed
-wheel/source-distribution checks. The present CI does not cover those paths
-or verify minimum dependency versions. Declare supported Python versions
-and test that matrix; Python >=3.10 alone does not establish compatibility.
-Test supported dependency combinations in clean environments; current
-requirements are not a reproducibility lock.
-
-Default Ruff checking reports 24 findings: six sweep import-order findings
-from checkout path injection, 15 semicolon findings, and three unused
-imports. Adopt a small explicit lint configuration and remove or justify
-findings; adding installable packaging can remove the path-injection need.
-Preserve the project's intentional annotation/default spacing convention.
-
-Sweep settings silently ignore a missing configuration file, permit empty
-grids/non-finite rankings, and export selected settings into tracked YAML
-during execution. Validate configuration paths/ranges and finite scores,
-and make promotion of selected settings deliberate. Cover one serial and
-one multiprocessing CLI path with small deterministic local inputs.
-
-### 12. Complete the GitHub-to-PyPI release path
-
-After the correctness and packaging gates pass, configure the intended
-GitHub remote, version/tag policy, concise changelog, support/contribution
-instructions, and release procedure. Use a TestPyPI rehearsal to verify
-metadata and installation before a production upload. A tag-triggered
-workflow should build/check distributions and publish those same tested
-artefacts; PyPI Trusted Publishing avoids storing a long-lived upload token.
-Repository/account setup and publication remain future work in this audit.
-
-The release checklist should follow the official
-[PyPA packaging guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/)
-and [PyPI Trusted Publishing documentation](https://docs.pypi.org/trusted-publishers/).
-
-## Validation and remaining limits
-
-Numerical correction stage: **154 tests passed** on the workspace Python
-3.12 interpreter. New regressions cover both dense training objectives,
-initial-loss/extreme-path drawdown, effective mean/std weights, invalid
-horizons/settings, and non-finite loss/gradient rejection. Existing TimeGAN
-checkpoint tests now require finite scores and the minimum-score epoch.
-Data/evaluation stage: **69 focused tests passed**, covering training-only
-scaling, multivariate inversion, missing/extreme prices, count validation,
-short-series ACF rules, metric input rejection, and deprecated KS alpha.
-Sweep/artifact stage: **41 focused tests passed**, including one offline
-serial TimeGAN CLI run, a two-worker sequential CLI run, configuration
-validation, chronological splitting, and inference bundle equivalence.
-Historical metrics and stored notebook outputs have not been recomputed.
-
-Full training, held-out benchmarks, installed-distribution tests, clean
-environments, hosted CI, dataset rights, account setup, and publication
-remain unvalidated. The original audit's inventory describes its starting
-checkout; new modules/tests are being added in the correction stages.
+These checks establish API/integration behaviour, not convergence, market
+realism, or validated financial performance.

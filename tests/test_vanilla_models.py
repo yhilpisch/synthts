@@ -1,7 +1,6 @@
 """Tests for synthts.vanilla module (Generator, Discriminator, GAN)."""
 
 import torch
-import pytest
 
 from synthts.vanilla import Generator, Discriminator, GAN
 

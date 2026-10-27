@@ -1,9 +1,9 @@
-# SyntheticTS — Realistic Synthetic Financial Time Series
+# synthts — Synthetic Financial Time Series
 
 <img src="https://hilpisch.com/tpq_logo.png" alt="The Python Quants" width="35%" align="right" border="0">
 
-**syntheticts** generates realistic synthetic financial time series using
-generative adversarial networks. The library ships four progressive
+**synthts** provides generative adversarial networks (GANs) and diagnostics for
+synthetic financial returns. The library ships four progressive
 approaches under one package (`synthts`), each with its own models,
 training loop, dedicated notebook, and test suite.
 
@@ -27,8 +27,8 @@ The project pursues this goal in four cumulative steps:
    uses Wasserstein loss with gradient penalty (WGAN-GP). Both configurations
    are designed to reduce training instability and mode collapse.
 
-3. **Sequential generation** — an LSTM-based generator produces return
-   *sequences* rather than scalar draws, capturing autocorrelation and
+3. **Sequential generation** — a long short-term memory (LSTM) generator produces return
+   *sequences* rather than scalar draws, targeting autocorrelation and
    volatility clustering — two core stylised facts that i.i.d. models
    miss.
 
@@ -36,19 +36,64 @@ The project pursues this goal in four cumulative steps:
    and adversarial joint training target volatility clustering, drawdown
    dispersion, and tail risk beyond the sequential GAN baseline.
 
+## Installation
+
+From this checkout, install the package before running examples:
+
+```bash
+python -m pip install .
+python -m pip install '.[dev]'  # notebooks, sweeps, and validation tools
+```
+
+The distribution and import package are both named `synthts`. Version
+`0.1.0` is being prepared; PyPI publication is pending. Python 3.10–3.12
+form the configured CI matrix. Dependency lower bounds are compatibility
+constraints, not a frozen research environment.
+
+## Offline example
+
+This small synthetic-input run checks the API without a market-data download.
+It is illustrative and makes no claim about financial realism.
+
+```python
+import numpy as np
+import torch
+from synthts.data import ReturnScaler
+from synthts.vanilla import (
+    Generator, Discriminator, train_gan, generate_samples,
+)
+
+returns = np.random.default_rng(100).normal(0, 0.01, 256)
+scaler = ReturnScaler()
+scaled = scaler.fit_transform(returns)
+torch.manual_seed(100)
+g = Generator(hidden_units=8)
+d = Discriminator(hidden_units=8)
+history = train_gan(g, d, scaled, epochs=10, batch_size=16, seed=100)
+synthetic = scaler.inverse_transform(generate_samples(g, 100))
+assert synthetic.shape == (100,)
+assert np.isfinite(history['g_loss']).all()
+```
+
 ## Quick Start
 
 ```python
-from synthts.data import load_eod, compute_log_returns, ReturnScaler
-from synthts.vanilla import Generator, Discriminator, train_gan, generate_samples
+import os
+import torch
+from synthts.data import EOD_URL, load_eod, compute_log_returns, ReturnScaler
+from synthts.vanilla import (
+    Generator, Discriminator, train_gan, generate_samples,
+)
 
 # Load and prepare GLD log-returns
-prices = load_eod(symbol='GLD', n_obs=2 * 252)
+source = os.environ.get('SYNTHTS_DATA', EOD_URL)
+prices = load_eod(url=source, symbol='GLD', n_obs=2 * 252)
 rets = compute_log_returns(prices)
 scaler = ReturnScaler()
 rets_ = scaler.fit_transform(rets)
 
 # Train a vanilla GAN
+torch.manual_seed(100)
 g = Generator(latent_dim=1, hidden_units=24, output_dim=1)
 d = Discriminator(input_dim=1, hidden_units=24)
 train_gan(g, d, rets_.reshape(-1, 1), epochs=5001, batch_size=32, seed=100)
@@ -60,14 +105,18 @@ synth = scaler.inverse_transform(samples)
 
 ### WGAN-GP
 
+The variants below reuse the standardised returns from the quick start.
+
 ```python
 from synthts.wgangp import WGANGenerator, Critic, train_wgangp, generate_samples
 
+torch.manual_seed(100)
 g = WGANGenerator(latent_dim=2, hidden_units=32, output_dim=1)
 c = Critic(input_dim=1, hidden_units=32)
 train_wgangp(g, c, rets_.reshape(-1, 1),
              epochs=10001, batch_size=64, seed=100)
-synth = generate_samples(g, len(rets_), latent_dim=2)
+synth = scaler.inverse_transform(
+    generate_samples(g, len(rets_), latent_dim=2))
 ```
 
 ### Sequential GAN
@@ -76,9 +125,10 @@ synth = generate_samples(g, len(rets_), latent_dim=2)
 from synthts.sequential import (SeqGenerator, SeqDiscriminator,
     train_seq_gan, generate_sequences)
 
+torch.manual_seed(100)
 g = SeqGenerator(latent_dim=4, hidden_units=64, output_dim=1,
                  seq_len=63, num_layers=2)
-d = SeqDiscriminator(input_dim=1, hidden_units=64, num_layers=2)
+d = SeqDiscriminator(input_dim=1, hidden_units=64)
 train_seq_gan(g, d, rets_.reshape(-1, 1),
               seq_len=63, epochs=5001, batch_size=32, seed=100)
 seqs = generate_sequences(g, 25, latent_dim=4)  # (25, 63, 1)
@@ -93,6 +143,7 @@ from synthts.timegan import (
     train_timegan, generate_timegan_sequences,
 )
 
+torch.manual_seed(100)
 e = TimeGANEmbedder(input_dim=1, hidden_units=128, latent_dim=24)
 r = TimeGANRecovery(latent_dim=24, hidden_units=128, output_dim=1)
 g = TimeGANGenerator(noise_dim=32, hidden_units=128, latent_dim=24)
@@ -130,25 +181,28 @@ plot_drawdown_comparison(rets, synth)
 
 ## Data
 
-The canonical data source is:
+The default example data source is:
 
 ```
 https://hilpisch.com/eod_data.csv
 ```
 
 End-of-day prices for multiple instruments. Log-returns are computed and
-standardised before training. Data is downloaded at runtime; no CSV is
-committed to the repository.
+standardised before training. Examples download data unless a local CSV
+is supplied. Sweeps retain local snapshots and provenance; no market-data CSV is committed to Git.
 
 ## Project Structure
 
 ```
 synthetic/
 ├── .gitignore
-├── OUTLINE.md                    # roadmap and milestone tracking
-├── README.md                     # this file
+├── README.md                     # usage and API reference
+├── pyproject.toml                # packaging and dependency metadata
+├── RELEASE.md                    # release validation and publishing
+├── CHANGELOG.md                  # version changes
 ├── synthts/
 │   ├── __init__.py
+│   ├── artifacts.py              # portable inference bundles
 │   ├── data.py                   # data loading, returns, scaling
 │   ├── evaluate.py               # KS test, ACF, drawdown, plots
 │   ├── vanilla.py                # baseline GAN
@@ -163,10 +217,12 @@ synthetic/
 ├── sweeps/
 │   ├── config.yml                # sequential sweep config
 │   ├── timegan_config.yml        # TimeGAN sweep config
+│   ├── common.py                 # snapshots, splits, and provenance
 │   ├── count.py                  # combination counter
 │   ├── sweep_sequential.py
 │   ├── sweep_timegan.py
 │   └── results/                  # ignored sweep result directories
+├── scripts/                      # distribution inspection
 ├── tests/
 │   ├── test_data.py
 │   ├── test_evaluate.py
@@ -189,7 +245,8 @@ synthetic/
 
 | Symbol | Description |
 |--------|-------------|
-| `load_eod` | Load EOD price data for a single symbol from CSV URL |
+| `load_eod` | Load one price column from a CSV URL/local path |
+| `split_returns` | Split returns chronologically before scaling/windowing |
 | `compute_log_returns` | Compute log-returns from a price series |
 | `ReturnScaler` | Standardise/invert log-returns via `StandardScaler` |
 
@@ -208,8 +265,8 @@ synthetic/
 | Symbol | Description |
 |--------|-------------|
 | `WGANGenerator` | Dense generator (same architecture as vanilla) |
-| `Critic` | Wasserstein critic (no sigmoid, LeakyReLU) |
-| `train_wgangp` | WGAN-GP training loop with gradient penalty |
+| `Critic` | Spectral-normalised critic returning logits/scores |
+| `train_wgangp` | BCE when n_critic=1; Wasserstein/GP when n_critic>1 |
 | `generate_samples` | Produce synthetic samples from a trained generator |
 
 ### `synthts.sequential`
@@ -217,7 +274,7 @@ synthetic/
 | Symbol | Description |
 |--------|-------------|
 | `SeqGenerator` | LSTM generator (latent vector → return sequence) |
-| `SeqDiscriminator` | LSTM discriminator (sequence → probability) |
+| `SeqDiscriminator` | Convolutional neural network (CNN) discriminator |
 | `train_seq_gan` | Sequential GAN training loop (overlapping windows) |
 | `generate_sequences` | Produce synthetic return sequences |
 
@@ -235,6 +292,13 @@ synthetic/
 | `generate_timegan_sequences` | Produce synthetic return sequences |
 | `compute_financial_losses` | Dict of individually weighted financial losses |
 
+### `synthts.artifacts`
+
+| Symbol | Description |
+|--------|-------------|
+| `save_bundle` | Save named components, preprocessing, and provenance |
+| `load_bundle` | Restore supported components with restricted Torch loading |
+
 ### `synthts.evaluate`
 
 | Symbol | Description |
@@ -244,7 +308,7 @@ synthetic/
 | `pass_rate` | Fraction of p-values above significance level |
 | `describe_comparison` | Descriptive statistics for real vs synthetic |
 | `mse_sorted` | MSE between sorted real and synthetic data |
-| `acf` | Autocorrelation function |
+| `acf` | Autocorrelation function (ACF) |
 | `compare_acf` | Compare ACF and squared-return ACF (real vs synthetic) |
 | `max_drawdown` | Maximum drawdown from a return array |
 | `drawdown_distribution` | Bootstrap distribution of max drawdown |
@@ -255,30 +319,69 @@ synthetic/
 | `plot_acf_comparison` | Side-by-side ACF and squared-return ACF |
 | `plot_drawdown_comparison` | Max-drawdown bootstrap histogram overlay |
 
-## Illustrative Training Settings
+## Training and evaluation contracts
 
-These are the notebook and quick-start configurations. Some API defaults are
-lighter to keep tests and small experiments practical.
+Every `epoch` is one sampled minibatch update, not a complete pass through
+the data. `train_wgangp` uses spectral-normalised binary cross-entropy for
+`n_critic=1`; `n_critic>1` selects Wasserstein loss with gradient penalty.
+Both modes are intentional. Wasserstein history contains `critic_loss`,
+`wasserstein_distance`, and `gradient_penalty`; BCE history contains
+`d_loss_real` and `d_loss_fake`. Both contain `g_loss`.
 
-| Parameter | Vanilla | WGAN-GP | Sequential | TimeGAN |
-|-----------|---------|---------|------------|---------|
-| Hidden units | 32/24 | 32 | 64 | 128 |
-| Latent dim | 1 | 2 | 4 | 24 |
-| Noise dim | — | — | 2 | 32 |
-| Sequence length | — | — | 63 (3-month) | 63 (3-month) |
-| Batch size | 32 | 64 | 32 | 128 |
-| Epochs/joint | 5001 | 10001 | 5001 | 2000 (after 500 + 500) |
-| LR (G) | 0.0001 | 0.0001 | 0.0001 | 0.0005 |
-| LR (D/C) | 0.001 | 0.001 | 0.001 | 0.0005 (joint) |
-| n_critic | — | 1 (SN+BCE) | — | — |
-| λ_GP | — | 10.0 (GP mode) | — | — |
-| Critic norm | — | Spectral norm | Spectral norm (CNN) | Spectral norm (obs-D) |
-| LSTM/GRU layers | — | — | 2 | 1 (GRU) |
-| Activation (G) | ReLU | ReLU | — | tanh or layernorm |
-| Activation (D/C) | ReLU/Sigmoid | LeakyReLU/Sigmoid | Sigmoid (last) | — |
-| Optimiser betas | default | (0.5, 0.9) | default | default |
-| LR schedule | none | none | none | cosine (joint) |
-| Seed | 100 | 100 | 100 | 100 |
+Seed Torch before model construction as well as passing a training seed.
+Use `1 <= stat_max_lag < seq_len` for temporal losses. Invalid data/settings
+raise `ValueError`; non-finite training objectives/gradients raise
+`FloatingPointError`. For TimeGAN, `moment_weight` multiplies
+`mean_weight * mean_loss + std_weight * std_loss`.
+
+The quick-start examples demonstrate calibration on one sample. The
+sequential/TimeGAN notebooks and sweeps split returns chronologically
+before windowing, fit scaling on training data, use validation data for
+selection, and reserve the final test period. Do not repeatedly tune on
+test diagnostics. KS pass rates are descriptive: non-rejection does not
+establish equivalence, and dependent/overlapping windows invalidate the
+usual independent-sample p-value interpretation. Maximum drawdown uses
+log-returns, includes initial wealth 1, and is negative or zero.
+
+`ReturnScaler.transform` applies training-only preprocessing to future
+returns. Inversion returns a vector for one feature and preserves columns
+for multiple features. `compute_log_returns` omits both returns adjacent
+to a missing price rather than bridging the gap. `load_eod` drops gaps in
+the selected price column before computing returns; choose your missing-data
+policy explicitly when supplying a price series directly. ACF routines
+require `max_lag < len(series)` and return zeros for constant series.
+
+## Reproducible research runs
+
+Install the development extra and run the sweep modules from the checkout:
+
+```bash
+python -m sweeps.count --config sweeps/config.yml
+python -m sweeps.sweep_sequential --data-path /path/to/frozen.csv
+python -m sweeps.sweep_timegan --data-path /path/to/frozen.csv
+```
+
+Set grids/budgets and split fractions in the YAML configuration before
+launching a full run. Sequential/TimeGAN CLIs retain the exact input CSV,
+its metadata/checksum, effective settings, validation metrics, and an
+inference bundle for every trial under a unique ignored run directory.
+All configurations share the run seed; repeat whole grids under predefined
+seeds when comparing models. The final test partition is unused by sweeps.
+Source rights and adjusted-price definitions must be confirmed before
+redistributing a real dataset. No canonical real-data benchmark is claimed
+for this release.
+
+Selected settings are exported only when explicitly enabled in the config
+with `export_on_complete: true` and an `export_best` destination. Existing
+`*_best.yml`/`timegan_ref.yml` files contain historical settings/metrics;
+new runs do not overwrite or load them automatically. To use a selected
+configuration in a notebook, set `SYNTHTS_CONFIG` to its explicit path.
+Set `SYNTHTS_DATA` to a frozen local CSV for notebook/README examples.
+
+Inference bundles contain component constructors/weights, fitted scaling,
+and provenance. Use `save_bundle`/`load_bundle` from `synthts.artifacts`.
+They restore evaluation-mode components and preprocessing; they do not
+resume optimiser state. Store model binaries outside Git.
 
 ## Testing
 
@@ -288,7 +391,8 @@ pytest tests/ -v
 
 The test suite covers model shapes, gradient flow, training weight updates,
 round-trip scaling, statistical tests, all plotting functions, and
-end-to-end smoke tests. 139 tests currently pass.
+end-to-end offline examples, numerical regressions, configuration round
+trips, serial/multiprocessing sweeps, and portable inference bundles.
 
 ## Requirements
 
@@ -297,12 +401,27 @@ end-to-end smoke tests. 139 tests currently pass.
 - `numpy`, `pandas`, `scipy`, `scikit-learn`, `matplotlib`
 - `tqdm`, `pyyaml` (sweep CLI)
 
-Install pinned minimum versions with:
+Install dependency ranges with:
 
 ```bash
 pip install -r requirements.txt
-pip install -r requirements-dev.txt   # adds pytest, pytest-cov
+pip install -r requirements-dev.txt   # development/notebook/sweep tools
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for changes/support and
+[RELEASE.md](RELEASE.md) for candidate validation and publication.
+
+## Method references
+
+The dense models follow the adversarial framework of
+[Goodfellow et al. (2014)](https://papers.nips.cc/paper/2014/hash/f033ed80deb0234979a61f95710dbe25-Abstract.html).
+The Wasserstein/gradient-penalty mode draws on
+[Gulrajani et al. (2017)](https://arxiv.org/abs/1704.00028).
+TimeGAN uses the embedding/supervision approach of
+[Yoon, Jarrett, and van der Schaar (2019)](https://papers.nips.cc/paper/2019/hash/c9efe5f26cd17ba6216bbe2a7d26d490-Abstract.html).
+The financial losses, observation critic, and spectral-normalised BCE
+configuration are project-specific variants; the examples do not claim to
+reproduce the papers' architectures or reported benchmarks exactly.
 
 ## Author
 

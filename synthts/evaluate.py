@@ -180,7 +180,8 @@ def sample_windows(returns: np.ndarray, seq_len: int, n_windows: int,
 def sequence_ks_pvalues(real_windows: np.ndarray,
                         synth_windows: np.ndarray) -> np.ndarray:
     """KS p-values for matched real and synthetic windows."""
-    real_windows, synth_windows = _windows(real_windows), _windows(synth_windows)
+    real_windows = _windows(real_windows)
+    synth_windows = _windows(synth_windows)
     n = min(len(real_windows), len(synth_windows))
     return np.array([
         ks_test(real_windows[i], synth_windows[i])['pvalue']

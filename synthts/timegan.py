@@ -485,19 +485,21 @@ def train_timegan(
         Without this argument, checkpoint scoring is in-sample calibration.
     checkpoint_interval : int
         Evaluate a calibration score every N joint epochs and keep the
-        best model. Uses validation_data when supplied, otherwise training windows.
+        best model. Uses validation_data when supplied, otherwise training
+        windows.
         0 disables checkpointing.
     lr_schedule : str
         Learning rate schedule for joint training.
         'none', 'cosine', or 'step'.
     obs_discriminator : nn.Module, optional
         Observation-space discriminator.  When provided, its
-        adversarial signal is added to the generator and embedder
-        objectives.
+        adversarial signal is added to the generator
+        objective.
     """
     data_scaled = training_settings(
-        data_scaled, batch_size, log_interval, embedding_epochs=embedding_epochs,
-        supervisor_epochs=supervisor_epochs, joint_epochs=joint_epochs)
+        data_scaled, batch_size, log_interval,
+        embedding_epochs=embedding_epochs, supervisor_epochs=supervisor_epochs,
+        joint_epochs=joint_epochs)
     integer('seq_len', seq_len, minimum=2)
     integer('noise_dim', noise_dim)
     integer('checkpoint_interval', checkpoint_interval, minimum=0)

@@ -11,7 +11,9 @@ from urllib.request import urlopen
 import numpy as np
 
 from synthts._validation import integer
-from synthts.data import EOD_URL, ReturnScaler, compute_log_returns, load_eod
+from synthts.data import (
+    EOD_URL, ReturnScaler, compute_log_returns, load_eod, split_returns,
+)
 
 
 def load_config(path):
@@ -51,18 +53,17 @@ def prepare_data(settings, snapshot_dir=None):
         content = Path(source).read_bytes()
     prices = load_eod(url=io.BytesIO(content), symbol=settings['symbol'])
     returns = compute_log_returns(prices)
-    test_start = len(returns) - int(len(returns) * settings['test_fraction'])
-    val_start = test_start - int(len(returns)
-                                * settings['validation_fraction'])
-    train, validation, test = np.split(returns, [val_start, test_start])
-    if min(map(len, (train, validation, test))) < settings['seq_len']:
-        raise ValueError('each chronological split needs at least seq_len rows')
+    train, validation, test = split_returns(
+        returns, settings['validation_fraction'], settings['test_fraction'],
+        settings['seq_len'])
+    val_start, test_start = len(train), len(train) + len(validation)
     scaler = ReturnScaler()
     scaled = scaler.fit_transform(train)
     metadata = {
         'source': str(source), 'symbol': settings['symbol'],
         'source_institution': settings.get('source_institution'),
-        'schema': {'index': 'date', 'selected_price_column': settings['symbol']},
+        'schema': {'index': 'date',
+                   'selected_price_column': settings['symbol']},
         'retrieved_at': datetime.now(timezone.utc).isoformat(),
         'sha256': hashlib.sha256(content).hexdigest(),
         'price_start': str(prices.index[0]),
@@ -84,7 +85,8 @@ def prepare_data(settings, snapshot_dir=None):
 def finite_row(row):
     """Reject non-finite results before selecting or exporting a trial."""
     for key, value in row.items():
-        if isinstance(value, (int, float, np.number)) and not np.isfinite(value):
+        if (isinstance(value, (int, float, np.number))
+                and not np.isfinite(value)):
             raise FloatingPointError(f'non-finite trial metric: {key}')
     return row
 

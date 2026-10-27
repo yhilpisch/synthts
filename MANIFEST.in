@@ -1,0 +1,16 @@
+include LICENSE
+include README.md CHANGELOG.md RELEASE.md CONTRIBUTING.md
+include requirements.txt requirements-dev.txt pyproject.toml
+recursive-include scripts *.py
+recursive-include tests *.py
+recursive-include sweeps *.py *.yml
+recursive-include notebooks *.ipynb
+recursive-include .github/workflows *.yml
+prune sweeps/results
+prune _ignore
+prune data
+prune build
+prune dist
+global-exclude *.py[cod] .DS_Store
+
+prune notebooks/.ipynb_checkpoints

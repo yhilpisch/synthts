@@ -1,15 +1,2 @@
-# Runtime dependencies for synthts.
-# Versions are minimum-tested pins; relax as needed on the upper bound.
-numpy>=1.24
-pandas>=2.0
-scipy>=1.10
-scikit-learn>=1.3
-matplotlib>=3.7
-
-# torch >= 2.0 (recommended 2.1+) for stable GRU + spectral_norm APIs.
-# Avoid 2.11.0.dev* pre-releases in production installs.
-torch>=2.0,<3.0
-
-# Sweep and configuration helpers.
-tqdm>=4.66
-pyyaml>=6.0
+# Runtime dependency metadata is maintained in pyproject.toml.
+.

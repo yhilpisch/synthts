@@ -103,3 +103,27 @@ class ReturnScaler:
         """Map standardised values back to original scale."""
         result = self.scaler.inverse_transform(self._matrix(scaled))
         return result[:, 0] if result.shape[1] == 1 else result
+
+
+def split_returns(returns, validation_fraction: float=0.2,
+                  test_fraction: float=0.2, seq_len: int=63):
+    """Split chronological returns before fitting scalers or making windows.
+
+    No window crosses a partition boundary. The final test partition is
+    reserved for evaluation after model selection; do not tune on it.
+    """
+    returns = np.asarray(returns, dtype=float)
+    if returns.ndim != 1 or not np.isfinite(returns).all():
+        raise ValueError('returns must be a finite 1-D array')
+    integer('seq_len', seq_len)
+    fractions = np.array([validation_fraction, test_fraction])
+    if (not np.isfinite(fractions).all() or (fractions <= 0).any()
+            or fractions.sum() >= 1):
+        raise ValueError(
+            'validation/test fractions must be positive and sum < 1')
+    test_start = len(returns) - int(len(returns) * test_fraction)
+    val_start = test_start - int(len(returns) * validation_fraction)
+    partitions = np.split(returns, [val_start, test_start])
+    if min(map(len, partitions)) < seq_len:
+        raise ValueError('each chronological split needs at least seq_len rows')
+    return tuple(partitions)

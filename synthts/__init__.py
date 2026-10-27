@@ -13,6 +13,7 @@ training helpers and a shared evaluation toolkit:
 Requires Python >= 3.10.
 """
 
+from synthts._version import __version__
 from synthts.vanilla import (
     GAN,
     Discriminator,
@@ -45,6 +46,7 @@ from synthts.timegan import (
 )
 
 __all__ = [
+    "__version__",
     # vanilla
     "Generator",
     "Discriminator",

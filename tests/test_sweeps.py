@@ -44,7 +44,8 @@ def test_chronological_split_scaler_and_checksum(data_path):
 def test_invalid_configuration_paths_and_grids_fail(module):
     with pytest.raises(FileNotFoundError):
         module.load_settings(argparse.Namespace(config='missing-audit.yml'))
-    key = 'hu_gen_values' if module is sweep_sequential else 'hidden_units_values'
+    key = ('hu_gen_values' if module is sweep_sequential
+           else 'hidden_units_values')
     with pytest.raises(ValueError, match='empty'):
         module.build_configs(module.DEFAULT_CONFIG | {key: []})
 

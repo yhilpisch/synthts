@@ -7,7 +7,6 @@ or via pytest:
 """
 
 import numpy as np
-import pytest
 
 from synthts.data import ReturnScaler
 from synthts.vanilla import (
@@ -16,7 +15,7 @@ from synthts.vanilla import (
     generate_samples,
     train_gan,
 )
-from synthts.evaluate import ks_test, pass_rate
+from synthts.evaluate import ks_test
 
 
 def test_smoke_cubic():
