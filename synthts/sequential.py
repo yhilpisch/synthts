@@ -5,6 +5,11 @@ import torch
 import torch.nn as nn
 from numpy.random import default_rng
 
+from synthts._validation import (
+    backward, dimensions, finite_nonnegative, integer, step,
+    temporal_lag, training_settings,
+)
+
 
 class SeqGenerator(nn.Module):
     """LSTM generator with global latent and per-step noise.
@@ -19,6 +24,14 @@ class SeqGenerator(nn.Module):
     def __init__(self, latent_dim: int=4, noise_dim: int=2,
                  hidden_units: int=48, output_dim: int=1,
                  seq_len: int=63, num_layers: int=1):
+        dimensions(
+            latent_dim=latent_dim,
+            noise_dim=noise_dim,
+            hidden_units=hidden_units,
+            output_dim=output_dim,
+            seq_len=seq_len,
+            num_layers=num_layers,
+        )
         super().__init__()
         self.latent_dim = latent_dim
         self.noise_dim = noise_dim
@@ -63,6 +76,10 @@ class SeqDiscriminator(nn.Module):
     """
 
     def __init__(self, input_dim: int=1, hidden_units: int=32):
+        dimensions(
+            input_dim=input_dim,
+            hidden_units=hidden_units,
+        )
         super().__init__()
         self.net = nn.Sequential(
             nn.utils.spectral_norm(
@@ -96,6 +113,7 @@ class SeqDiscriminator(nn.Module):
 
 def _acf_torch(x: torch.Tensor, max_lag: int=5) -> torch.Tensor:
     """Average temporal ACF for a batch of sequences."""
+    temporal_lag(x.shape[1], max_lag)
     x = x - x.mean(dim=1, keepdim=True)
     var = x.pow(2).mean(dim=1, keepdim=True).clamp_min(1e-6)
     values = []
@@ -171,6 +189,19 @@ def train_seq_gan(generator, discriminator, data_scaled,
     dict
         Keys 'g_loss', 'd_loss_real', 'd_loss_fake'.
     """
+    data_scaled = training_settings(
+        data_scaled, batch_size, log_interval, epochs=epochs)
+    integer('latent_dim', latent_dim)
+    integer('seq_len', seq_len)
+    integer('n_gen_steps', n_gen_steps)
+    finite_nonnegative(lr_g=lr_g, lr_d=lr_d, stat_weight=stat_weight,
+                       label_smooth=label_smooth)
+    if label_smooth >= 1:
+        raise ValueError('label_smooth must be smaller than 1')
+    if generator.seq_len != seq_len or generator.latent_dim != latent_dim:
+        raise ValueError('generator dimensions must match training settings')
+    if stat_weight:
+        temporal_lag(seq_len, stat_max_lag)
     rng = default_rng(seed)
     torch.manual_seed(seed)
 
@@ -204,15 +235,15 @@ def train_seq_gan(generator, discriminator, data_scaled,
         real_seq = windows[idx]
         d_real = disc(real_seq)
         loss_real = bce(d_real, smooth_ones)
-        loss_real.backward()
+        backward(loss_real)
 
         noise = torch.randn(batch_size, latent_dim, device=device)
         with torch.no_grad():
             fake_seq = gen(noise)
         d_fake = disc(fake_seq.detach())
         loss_fake = bce(d_fake, zeros)
-        loss_fake.backward()
-        opt_d.step()
+        backward(loss_fake)
+        step(opt_d)
 
         # --- train generator (multiple steps) ---
         for _ in range(n_gen_steps):
@@ -228,8 +259,8 @@ def train_seq_gan(generator, discriminator, data_scaled,
                 stat = _stat_loss(windows[idx_g], fake_seq,
                                   max_lag=stat_max_lag)
                 loss_g = loss_g + stat_weight * stat
-            loss_g.backward()
-            opt_g.step()
+            backward(loss_g)
+            step(opt_g)
 
         history['g_loss'].append(loss_g.item())
         history['d_loss_real'].append(loss_real.item())

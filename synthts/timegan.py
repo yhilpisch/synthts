@@ -11,6 +11,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from numpy.random import default_rng
 
+from synthts._validation import (
+    backward, dimensions, finite_nonnegative, integer, step,
+    temporal_lag, training_settings,
+)
+
 
 class TimeGANEmbedder(nn.Module):
     """Embed observed sequences into latent temporal states."""
@@ -18,6 +23,12 @@ class TimeGANEmbedder(nn.Module):
     def __init__(self, input_dim: int=1, hidden_units: int=64,
                  latent_dim: int=24, num_layers: int=1,
                  latent_activation: str='tanh'):
+        dimensions(
+            input_dim=input_dim,
+            hidden_units=hidden_units,
+            latent_dim=latent_dim,
+            num_layers=num_layers,
+        )
         super().__init__()
         if latent_activation not in ('tanh', 'layernorm'):
             raise ValueError(
@@ -45,6 +56,12 @@ class TimeGANRecovery(nn.Module):
 
     def __init__(self, latent_dim: int=24, hidden_units: int=64,
                  output_dim: int=1, num_layers: int=1):
+        dimensions(
+            latent_dim=latent_dim,
+            hidden_units=hidden_units,
+            output_dim=output_dim,
+            num_layers=num_layers,
+        )
         super().__init__()
         self.latent_dim = latent_dim
         self.hidden_units = hidden_units
@@ -64,6 +81,12 @@ class TimeGANGenerator(nn.Module):
     def __init__(self, noise_dim: int=8, hidden_units: int=64,
                  latent_dim: int=24, num_layers: int=1,
                  latent_activation: str='tanh'):
+        dimensions(
+            noise_dim=noise_dim,
+            hidden_units=hidden_units,
+            latent_dim=latent_dim,
+            num_layers=num_layers,
+        )
         super().__init__()
         if latent_activation not in ('tanh', 'layernorm'):
             raise ValueError(
@@ -92,6 +115,11 @@ class TimeGANSupervisor(nn.Module):
     def __init__(self, latent_dim: int=24, hidden_units: int=64,
                  num_layers: int=1,
                  latent_activation: str='tanh'):
+        dimensions(
+            latent_dim=latent_dim,
+            hidden_units=hidden_units,
+            num_layers=num_layers,
+        )
         super().__init__()
         if latent_activation not in ('tanh', 'layernorm'):
             raise ValueError(
@@ -118,6 +146,11 @@ class TimeGANDiscriminator(nn.Module):
 
     def __init__(self, latent_dim: int=24, hidden_units: int=64,
                  num_layers: int=1):
+        dimensions(
+            latent_dim=latent_dim,
+            hidden_units=hidden_units,
+            num_layers=num_layers,
+        )
         super().__init__()
         self.latent_dim = latent_dim
         self.hidden_units = hidden_units
@@ -143,6 +176,11 @@ class TimeGANObsDiscriminator(nn.Module):
     def __init__(self, input_dim: int=1,
                  hidden_channels: int=32,
                  num_layers: int=2):
+        dimensions(
+            input_dim=input_dim,
+            hidden_channels=hidden_channels,
+            num_layers=num_layers,
+        )
         super().__init__()
         self.input_dim = input_dim
         layers = []
@@ -205,8 +243,8 @@ def _std_loss(real: torch.Tensor,
     """Standard deviation matching loss."""
     real_f = real.reshape(-1, real.shape[-1])
     fake_f = fake.reshape(-1, fake.shape[-1])
-    real_std = real_f.var(dim=0, unbiased=False).sqrt()
-    fake_std = fake_f.var(dim=0, unbiased=False).sqrt()
+    real_std = real_f.std(dim=0, unbiased=False)
+    fake_std = fake_f.std(dim=0, unbiased=False)
     return torch.abs(real_std - fake_std).mean()
 
 
@@ -218,6 +256,7 @@ def _moment_loss(real: torch.Tensor,
 
 def _acf_torch(x: torch.Tensor, max_lag: int=10) -> torch.Tensor:
     """Average temporal ACF for a batch of sequences."""
+    temporal_lag(x.shape[1], max_lag)
     x = x - x.mean(dim=1, keepdim=True)
     var = x.pow(2).mean(dim=1, keepdim=True).clamp_min(1e-6)
     values = []
@@ -402,9 +441,13 @@ def train_timegan(
 
     Parameters
     ----------
+    mean_weight, std_weight : float
+        Component multipliers inside moment_weight *
+        (mean_weight * mean_loss + std_weight * std_loss).
     checkpoint_interval : int
-        Evaluate validation score every N joint epochs and keep the
-        best model.  0 disables checkpointing.
+        Evaluate a calibration score every N joint epochs and keep the
+        best model. Uses training windows, not held-out validation.
+        0 disables checkpointing.
     lr_schedule : str
         Learning rate schedule for joint training.
         'none', 'cosine', or 'step'.
@@ -413,6 +456,25 @@ def train_timegan(
         adversarial signal is added to the generator and embedder
         objectives.
     """
+    data_scaled = training_settings(
+        data_scaled, batch_size, log_interval, embedding_epochs=embedding_epochs,
+        supervisor_epochs=supervisor_epochs, joint_epochs=joint_epochs)
+    integer('seq_len', seq_len, minimum=2)
+    integer('noise_dim', noise_dim)
+    integer('checkpoint_interval', checkpoint_interval, minimum=0)
+    temporal_lag(seq_len, stat_max_lag)
+    if lr_schedule not in ('none', 'cosine', 'step'):
+        raise ValueError("lr_schedule must be 'none', 'cosine', or 'step'")
+    finite_nonnegative(
+        lr=lr, gamma=gamma, recon_weight=recon_weight,
+        supervised_weight=supervised_weight, moment_weight=moment_weight,
+        stat_weight=stat_weight, mean_weight=mean_weight,
+        std_weight=std_weight, central_quantile_weight=central_quantile_weight,
+        tail_quantile_weight=tail_quantile_weight, acf_weight=acf_weight,
+        abs_acf_weight=abs_acf_weight, squared_acf_weight=squared_acf_weight,
+        terminal_quantile_weight=terminal_quantile_weight,
+        drawdown_quantile_weight=drawdown_quantile_weight,
+        obs_adv_weight=obs_adv_weight)
     rng = default_rng(seed)
     torch.manual_seed(seed)
 
@@ -495,8 +557,8 @@ def train_timegan(
         opt_er.zero_grad()
         x_tilde = r(e(x))
         loss = F.mse_loss(x_tilde, x)
-        loss.backward()
-        opt_er.step()
+        backward(loss)
+        step(opt_er)
         history['recon_loss'].append(loss.item())
         if epoch % log_interval == 0:
             print(f'Embedding {epoch:5d} | R: {loss.item():.4f}')
@@ -510,8 +572,8 @@ def train_timegan(
         opt_s.zero_grad()
         h = e(x).detach()
         loss = _supervised_loss(h, s(h))
-        loss.backward()
-        opt_s.step()
+        backward(loss)
+        step(opt_s)
         history['supervised_loss'].append(loss.item())
         if epoch % log_interval == 0:
             print(f'Supervisor {epoch:4d} | S: {loss.item():.4f}')
@@ -537,8 +599,8 @@ def train_timegan(
             + bce(y_fake, torch.zeros_like(y_fake))
             + gamma * bce(y_fake_e, torch.zeros_like(y_fake_e))
         )
-        d_loss.backward()
-        opt_d.step()
+        backward(d_loss)
+        step(opt_d)
 
         # --- Observation discriminator update ---
         if obs_d is not None:
@@ -550,8 +612,8 @@ def train_timegan(
                 bce(obs_y_real, torch.ones_like(obs_y_real))
                 + bce(obs_y_fake, torch.zeros_like(obs_y_fake))
             )
-            obs_d_loss.backward()
-            opt_obs_d.step()
+            backward(obs_d_loss)
+            step(opt_obs_d)
 
         # --- Generator + Supervisor update ---
         z = _sample_noise(batch_size, seq_len, noise_dim, device)
@@ -568,7 +630,8 @@ def train_timegan(
 
         # Modular financial losses
         losses = compute_financial_losses(x, x_hat, max_lag=stat_max_lag)
-        g_mom = losses['mean'] + losses['std']
+        g_mom = (mean_weight * losses['mean']
+                 + std_weight * losses['std'])
         g_stat = (central_quantile_weight * losses['central_quantile']
                   + tail_quantile_weight * losses['tail_quantile']
                   + acf_weight * losses['acf']
@@ -588,8 +651,8 @@ def train_timegan(
                   + supervised_weight * g_sup
                   + moment_weight * g_mom
                   + stat_weight * g_stat)
-        g_loss.backward()
-        opt_gs.step()
+        backward(g_loss)
+        step(opt_gs)
 
         # --- Embedder update ---
         opt_e.zero_grad()
@@ -598,8 +661,8 @@ def train_timegan(
         e_recon = F.mse_loss(x_tilde, x)
         e_sup = _supervised_loss(h_real, s(h_real))
         e_loss = recon_weight * e_recon + supervised_weight * e_sup
-        e_loss.backward()
-        opt_e.step()
+        backward(e_loss)
+        step(opt_e)
 
         # --- Record history ---
         history['g_loss'].append(g_loss.item())
@@ -625,7 +688,10 @@ def train_timegan(
         # --- Checkpoint scoring ---
         if checkpoint_interval > 0 and (epoch + 1) % checkpoint_interval == 0:
             with torch.no_grad():
-                e.eval(); r.eval(); g.eval(); s.eval()
+                e.eval()
+                r.eval()
+                g.eval()
+                s.eval()
                 z_val = _sample_noise(batch_size, seq_len,
                                       noise_dim, device)
                 x_hat_val = r(s(g(z_val)))
@@ -637,14 +703,17 @@ def train_timegan(
                              + val_losses['squared_acf'].item()
                              + val_losses['terminal_quantile'].item()
                              + val_losses['drawdown_quantile'].item())
-                if not np.isnan(val_score) and val_score < best_val_score:
+                if np.isfinite(val_score) and val_score < best_val_score:
                     best_val_score = val_score
                     best_epoch = epoch + 1
                     best_snapshot = _snapshot_models(e, r, g, s, d)
                     if obs_d is not None:
                         best_snapshot.update(
                             _snapshot_models(obs_d))
-                e.train(); r.train(); g.train(); s.train()
+                e.train()
+                r.train()
+                g.train()
+                s.train()
                 history.setdefault('val_score', []).append(val_score)
 
         if epoch % log_interval == 0:

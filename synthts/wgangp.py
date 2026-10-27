@@ -5,12 +5,22 @@ import torch
 import torch.nn as nn
 from numpy.random import default_rng
 
+from synthts._validation import (
+    backward, dimensions, finite_nonnegative, integer, step,
+    training_settings,
+)
+
 
 class WGANGenerator(nn.Module):
     """Dense generator for WGAN-GP (2 hidden layers, no norm)."""
 
     def __init__(self, latent_dim: int=2, hidden_units: int=32,
                  output_dim: int=1):
+        dimensions(
+            latent_dim=latent_dim,
+            hidden_units=hidden_units,
+            output_dim=output_dim,
+        )
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(latent_dim, hidden_units),
@@ -33,6 +43,10 @@ class Critic(nn.Module):
     """
 
     def __init__(self, input_dim: int=1, hidden_units: int=32):
+        dimensions(
+            input_dim=input_dim,
+            hidden_units=hidden_units,
+        )
         super().__init__()
         self.net = nn.Sequential(
             nn.utils.spectral_norm(nn.Linear(input_dim, hidden_units)),
@@ -106,8 +120,16 @@ def train_wgangp(generator, critic, data_scaled,
     Returns
     -------
     dict
-        Keys 'g_loss', 'd_loss_real', 'd_loss_fake'.
+        BCE mode: 'g_loss', 'd_loss_real', 'd_loss_fake'.
+        Wasserstein mode: 'g_loss', 'critic_loss', 'wasserstein_distance',
+        'gradient_penalty'. Critic metrics describe the last critic update
+        before each generator update.
     """
+    data_scaled = training_settings(
+        data_scaled, batch_size, log_interval, epochs=epochs)
+    integer('latent_dim', latent_dim)
+    integer('n_critic', n_critic)
+    finite_nonnegative(lr_g=lr_g, lr_c=lr_c, lambda_gp=lambda_gp)
     rng = default_rng(seed)
     torch.manual_seed(seed)
 
@@ -138,7 +160,7 @@ def train_wgangp(generator, critic, data_scaled,
             real = data_t[idx]
             d_real = torch.sigmoid(crit(real))
             loss_real = bce(d_real, ones)
-            loss_real.backward()
+            backward(loss_real)
 
             noise = torch.randn(batch_size, latent_dim,
                                 device=device)
@@ -146,8 +168,8 @@ def train_wgangp(generator, critic, data_scaled,
                 fake = gen(noise)
             d_fake = torch.sigmoid(crit(fake.detach()))
             loss_fake = bce(d_fake, zeros)
-            loss_fake.backward()
-            opt_c.step()
+            backward(loss_fake)
+            step(opt_c)
 
             # --- train generator ---
             gen.train()
@@ -157,8 +179,12 @@ def train_wgangp(generator, critic, data_scaled,
             fake = gen(noise)
             d_fake = torch.sigmoid(crit(fake))
             loss_g = bce(d_fake, ones)
-            loss_g.backward()
-            opt_g.step()
+            backward(loss_g)
+            step(opt_g)
+
+            history['g_loss'].append(loss_g.item())
+            history['d_loss_real'].append(loss_real.item())
+            history['d_loss_fake'].append(loss_fake.item())
 
             if epoch % log_interval == 0:
                 print(f'Epoch {epoch:5d} | '
@@ -167,6 +193,9 @@ def train_wgangp(generator, critic, data_scaled,
                       f'G: {loss_g.item():.4f}')
 
     else:
+        history = {key: [] for key in (
+            'g_loss', 'critic_loss', 'wasserstein_distance',
+            'gradient_penalty')}
         # Wasserstein + gradient-penalty mode
         for epoch in range(epochs):
             for _ in range(n_critic):
@@ -179,12 +208,13 @@ def train_wgangp(generator, critic, data_scaled,
                     fake = gen(noise)
                 score_real = crit(real)
                 score_fake = crit(fake)
+                w_dist = (score_real.mean() - score_fake.mean()).item()
                 gp = _gradient_penalty(crit, real, fake, device,
                                       lambda_gp)
                 loss_c = (score_fake.mean() - score_real.mean()
                           + gp)
-                loss_c.backward()
-                opt_c.step()
+                backward(loss_c)
+                step(opt_c)
 
             gen.train()
             opt_g.zero_grad()
@@ -193,12 +223,15 @@ def train_wgangp(generator, critic, data_scaled,
             fake = gen(noise)
             score_fake = crit(fake)
             loss_g = -score_fake.mean()
-            loss_g.backward()
-            opt_g.step()
+            backward(loss_g)
+            step(opt_g)
+
+            history['g_loss'].append(loss_g.item())
+            history['critic_loss'].append(loss_c.item())
+            history['wasserstein_distance'].append(w_dist)
+            history['gradient_penalty'].append(gp.item())
 
             if epoch % log_interval == 0:
-                w_dist = (score_real.mean()
-                          - score_fake.mean()).item()
                 print(f'Epoch {epoch:5d} | '
                       f'C: {loss_c.item():.4f} '
                       f'G: {loss_g.item():.4f} '

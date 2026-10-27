@@ -5,12 +5,22 @@ import torch
 import torch.nn as nn
 from numpy.random import default_rng
 
+from synthts._validation import (
+    backward, dimensions, finite_nonnegative, integer, step,
+    training_settings,
+)
+
 
 class Generator(nn.Module):
     """Dense generator: noise -> synthetic data."""
 
     def __init__(self, latent_dim: int=1, hidden_units: int=32,
                  output_dim: int=1):
+        dimensions(
+            latent_dim=latent_dim,
+            hidden_units=hidden_units,
+            output_dim=output_dim,
+        )
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(latent_dim, hidden_units),
@@ -28,6 +38,10 @@ class Discriminator(nn.Module):
     """Dense discriminator: data -> probability (real vs fake)."""
 
     def __init__(self, input_dim: int=1, hidden_units: int=32):
+        dimensions(
+            input_dim=input_dim,
+            hidden_units=hidden_units,
+        )
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_units),
@@ -84,6 +98,10 @@ def train_gan(generator, discriminator, data_scaled,
     dict
         Keys 'g_loss', 'd_loss_real', 'd_loss_fake'.
     """
+    data_scaled = training_settings(
+        data_scaled, batch_size, log_interval, epochs=epochs)
+    integer('latent_dim', latent_dim)
+    finite_nonnegative(lr_g=lr_g, lr_d=lr_d)
     rng = default_rng(seed)
     torch.manual_seed(seed)
 
@@ -110,15 +128,15 @@ def train_gan(generator, discriminator, data_scaled,
         real = data_t[idx]
         d_real = disc(real)
         loss_real = bce(d_real, ones)
-        loss_real.backward()
+        backward(loss_real)
 
         noise = torch.randn(batch_size, latent_dim, device=device)
         with torch.no_grad():
             fake = gen(noise)
         d_fake = disc(fake.detach())
         loss_fake = bce(d_fake, zeros)
-        loss_fake.backward()
-        opt_d.step()
+        backward(loss_fake)
+        step(opt_d)
 
         # --- train generator ---
         opt_g.zero_grad()
@@ -126,8 +144,12 @@ def train_gan(generator, discriminator, data_scaled,
         fake = gen(noise)
         d_fake = disc(fake)
         loss_g = bce(d_fake, ones)
-        loss_g.backward()
-        opt_g.step()
+        backward(loss_g)
+        step(opt_g)
+
+        history['g_loss'].append(loss_g.item())
+        history['d_loss_real'].append(loss_real.item())
+        history['d_loss_fake'].append(loss_fake.item())
 
         if epoch % log_interval == 0:
             print(f'Epoch {epoch:5d} | '

@@ -208,11 +208,18 @@ def compare_acf_windows(real_windows: np.ndarray,
 
 
 def max_drawdown(returns: np.ndarray) -> float:
-    """Maximum drawdown from a 1-D return array."""
-    cum = np.exp(np.cumsum(returns))
-    peak = np.maximum.accumulate(cum)
-    dd = (cum - peak) / peak
-    return dd.min()
+    """Negative maximum drawdown from log-returns and initial wealth 1.
+
+    Compute in log space to avoid overflow on long or extreme paths.
+    """
+    returns = np.asarray(returns, dtype=float)
+    if returns.ndim != 1 or not len(returns):
+        raise ValueError('returns must be a non-empty 1-D array')
+    if not np.isfinite(returns).all():
+        raise ValueError('returns must contain only finite values')
+    log_wealth = np.insert(np.cumsum(returns), 0, 0.0)
+    peak = np.maximum.accumulate(log_wealth)
+    return float(np.expm1((log_wealth - peak).min()))
 
 
 def drawdown_distribution(returns: np.ndarray,

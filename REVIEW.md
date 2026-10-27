@@ -2,11 +2,12 @@
 
 Reviewed 2026-10-27 against local commit `264ce11`. Scope: inventory,
 source inspection, executable quality checks, and the GitHub/PyPI release
-path. This is an audit; the implementation findings below remain open.
+path. Implementation is in progress; only unresolved findings remain below.
+The numerical correction stage now has regression coverage.
 Remove resolved items after their acceptance checks pass.
 
 **Assessment:** a working research codebase, but not yet an installable
-distribution. Passing tests currently conceal several correctness defects.
+distribution. Packaging and reproducibility work remains before release.
 Resolve the release blockers before publishing a first package version.
 
 ## Current inventory
@@ -53,58 +54,6 @@ Acceptance: build both wheel and source distribution, run `twine check`,
 inspect archive contents, rebuild from the source distribution, and test
 imports/examples from an installed wheel outside the checkout. Do not
 require a directory reorganisation solely to add packaging.
-
-### 2. Repair loss histories in both dense training loops
-
-`train_gan` and both branches of `train_wgangp` initialise history lists but
-never append losses. Two-step runs return three empty lists. Current tests
-check that a dictionary exists and weights change, so they miss the defect.
-
-Return one finite observation per training step for each documented series.
-For Wasserstein mode, define history keys that accurately describe critic
-loss/distance rather than inventing BCE-style values. Test lengths, finite
-values, and both training objectives.
-
-### 3. Correct maximum drawdown before using it to rank models
-
-`evaluate.max_drawdown` starts the running peak after the first return,
-omitting initial wealth. It returns `0.0` for log-returns `[-0.10]` and
-`[-0.10, 0.05]`; both have maximum drawdown
-`exp(-0.10) - 1 = -0.09516258196404043` from initial wealth 1.
-The defect propagates into window diagnostics and sweep scores.
-
-Include initial wealth in the peak calculation; specify log-return units
-and the negative drawdown convention. Test initial losses, recovery paths,
-and exact known values. Preserve historical results as historical; corrected
-metrics need a new, explicitly identified evaluation.
-
-### 4. Make TimeGAN mean/std weights effective
-
-`train_timegan` accepts `mean_weight` and `std_weight`, and sweep exports
-record them, but the objective uses the unweighted sum of mean/std losses.
-Identically initialised two-step runs with both weights set to 0 versus 999
-produce identical loss histories and all model tensors.
-
-Define how component weights combine with `moment_weight`, implement that
-contract, and test that changing each weight changes its contribution to
-the objective/gradient. Keep default behaviour deliberate and documented.
-
-### 5. Reject invalid horizons and prevent silent non-finite training
-
-The Torch ACF helpers in `sequential.py` and `timegan.py` average empty
-slices when a lag reaches the sequence length. A TimeGAN run with
-`seq_len=10` and default `stat_max_lag=10` returns `g_loss=[nan]`.
-Several existing TimeGAN tests use this combination and assert only keys
-or weight changes; checkpoint tests explicitly tolerate non-finite scores.
-
-Validate `1 <= stat_max_lag < seq_len` when temporal losses are evaluated,
-and validate sequence/model dimensions, non-empty finite input, positive
-batch sizes, valid training budgets/intervals, and schedule choices.
-TimeGAN supervision requires at least two time steps. Reject unsupported
-values clearly rather than silently falling back or returning corrupt
-models. Add finite loss, gradient, parameter, and generated-output checks
-to meaningful short training tests. Disabled loss weights must not allow
-`0 * nan` to contaminate the objective.
 
 ### 6. Align TimeGAN sweep configuration and notebook execution
 
@@ -249,39 +198,16 @@ The release checklist should follow the official
 [PyPA packaging guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/)
 and [PyPI Trusted Publishing documentation](https://docs.pypi.org/trusted-publishers/).
 
-## Validation baseline and limits
+## Validation and remaining limits
 
-These results describe the inspected checkout, not a released distribution.
-Local validation used the workspace Python interpreter
-`/Users/yves/Temp/pyai/bin/python` on macOS, Python 3.12.12, Torch 2.10.0,
-NumPy 1.26.4, pandas 2.3.3, SciPy 1.15.3, scikit-learn 1.8.0, and
-Matplotlib 3.10.8.
+Numerical correction stage: **154 tests passed** on the workspace Python
+3.12 interpreter. New regressions cover both dense training objectives,
+initial-loss/extreme-path drawdown, effective mean/std weights, invalid
+horizons/settings, and non-finite loss/gradient rejection. Existing TimeGAN
+checkpoint tests now require finite scores and the minimum-score epoch.
+Historical metrics and stored notebook outputs have not been recomputed.
 
-- `python -m pytest tests/ -q --cov=synthts --cov-report=term-missing`:
-  **139 passed**, **98% statement coverage**. Coverage does not establish
-  finite training or scientific validity; see the confirmed defects above.
-- All 19 Python files parsed. All four notebooks passed `nbformat` schema
-  validation and IPython-transformed code-cell syntax checks. No Python or
-  notebook code lines exceed 80 characters; notebook cells have no leading
-  or trailing empty lines.
-- Both sweep counters ran. One tiny in-process trial per sweep completed
-  with finite numeric result fields on seeded synthetic input; these were
-  interface checks, not financial benchmarks. No full sweep was launched.
-- Targeted probes reproduced empty histories, incorrect initial-loss
-  drawdown, the README constructor error, short-series ACF failure,
-  non-finite short-horizon TimeGAN loss, and ineffective mean/std weights.
-- Wheel creation failed as expected from missing packaging metadata.
-  Default Ruff check failed with the 24 findings above.
-- `pip check` found two unrelated conflicts in the shared environment:
-  `aider-chat` requires markdown-it-py 4.0.0/Pillow 12.1.1; installed versions
-  are 4.2.0/12.3.0. Use a clean release environment rather than changing
-  unrelated workspace packages.
-- A limited literal scan of tracked files found no private-key header or
-  AWS/GitHub/PyPI token prefixes checked. This was not a full history or
-  credential audit.
-
-Full notebook training, historical-result reproduction, remote dataset
-availability/rights, clean-environment compatibility, hosted CI, GitHub/PyPI
-account state, and TestPyPI installation were not validated. No source,
-notebook, configuration, reference, or historical-result files were changed
-by this review, and nothing was pushed or published.
+Full training, held-out benchmarks, installed-distribution tests, clean
+environments, hosted CI, dataset rights, account setup, and publication
+remain unvalidated. The original audit's inventory describes its starting
+checkout; new modules/tests are being added in the correction stages.

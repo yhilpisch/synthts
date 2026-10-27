@@ -220,7 +220,7 @@ class TestTrainTimeGAN:
         e, r, g, s, d = self._modules()
         history = train_timegan(
             e, r, g, s, d, simple_data,
-            seq_len=10, embedding_epochs=2,
+            seq_len=10, stat_max_lag=5, embedding_epochs=2,
             supervisor_epochs=2, joint_epochs=2,
             batch_size=4, noise_dim=3, seed=42,
             log_interval=100,
@@ -233,7 +233,7 @@ class TestTrainTimeGAN:
         e, r, g, s, d = self._modules()
         history = train_timegan(
             e, r, g, s, d, simple_data,
-            seq_len=10, embedding_epochs=2,
+            seq_len=10, stat_max_lag=5, embedding_epochs=2,
             supervisor_epochs=2, joint_epochs=2,
             batch_size=4, noise_dim=3, seed=42,
             log_interval=100,
@@ -248,7 +248,7 @@ class TestTrainTimeGAN:
         w0 = list(g.parameters())[0].data.clone()
         train_timegan(
             e, r, g, s, d, simple_data,
-            seq_len=10, embedding_epochs=2,
+            seq_len=10, stat_max_lag=5, embedding_epochs=2,
             supervisor_epochs=2, joint_epochs=2,
             batch_size=4, noise_dim=3, seed=42,
             log_interval=100,
@@ -260,7 +260,7 @@ class TestTrainTimeGAN:
         e, r, g, s, d = self._modules(latent_activation='layernorm')
         history = train_timegan(
             e, r, g, s, d, simple_data,
-            seq_len=10, embedding_epochs=2,
+            seq_len=10, stat_max_lag=5, embedding_epochs=2,
             supervisor_epochs=2, joint_epochs=2,
             batch_size=4, noise_dim=3, seed=42,
             log_interval=100,
@@ -271,7 +271,7 @@ class TestTrainTimeGAN:
         e, r, g, s, d = self._modules()
         history = train_timegan(
             e, r, g, s, d, simple_data,
-            seq_len=10, embedding_epochs=2,
+            seq_len=10, stat_max_lag=5, embedding_epochs=2,
             supervisor_epochs=2, joint_epochs=4,
             batch_size=4, noise_dim=3, seed=42,
             lr_schedule='cosine', log_interval=100,
@@ -282,7 +282,7 @@ class TestTrainTimeGAN:
         e, r, g, s, d = self._modules()
         history = train_timegan(
             e, r, g, s, d, simple_data,
-            seq_len=10, embedding_epochs=2,
+            seq_len=10, stat_max_lag=5, embedding_epochs=2,
             supervisor_epochs=2, joint_epochs=4,
             batch_size=4, noise_dim=3, seed=42,
             lr_schedule='step', log_interval=100,
@@ -293,14 +293,11 @@ class TestTrainTimeGAN:
         e, r, g, s, d = self._modules()
         history = train_timegan(
             e, r, g, s, d, simple_data,
-            seq_len=10, embedding_epochs=5,
+            seq_len=10, stat_max_lag=5, embedding_epochs=5,
             supervisor_epochs=5, joint_epochs=20,
             batch_size=4, noise_dim=3, seed=42,
             checkpoint_interval=5, log_interval=100,
         )
-        # If no valid checkpoint was found, best_epoch may be absent
-        # (tiny models can produce NaN losses). Just verify the
-        # val_score history was recorded.
         assert 'val_score' in history
         assert len(history['val_score']) > 0
 
@@ -311,7 +308,7 @@ class TestTrainTimeGAN:
         history = train_timegan(
             e, r, g, s, d, simple_data,
             obs_discriminator=obs_d,
-            seq_len=10, embedding_epochs=2,
+            seq_len=10, stat_max_lag=5, embedding_epochs=2,
             supervisor_epochs=2, joint_epochs=2,
             batch_size=4, noise_dim=3, seed=42,
             log_interval=100,
@@ -324,7 +321,7 @@ class TestTrainTimeGAN:
         with pytest.raises(ValueError):
             train_timegan(
                 e, r, g, s, d, np.random.randn(5, 1),
-                seq_len=10, embedding_epochs=1,
+                seq_len=10, stat_max_lag=5, embedding_epochs=1,
                 supervisor_epochs=1, joint_epochs=1,
                 batch_size=4, noise_dim=3,
             )
@@ -398,7 +395,7 @@ class TestCheckpointRestore:
         d = TimeGANDiscriminator(latent_dim=5, hidden_units=8)
         history = train_timegan(
             e, r, g, s, d, data_scaled,
-            seq_len=10, embedding_epochs=5,
+            seq_len=10, stat_max_lag=5, embedding_epochs=5,
             supervisor_epochs=5, joint_epochs=20,
             batch_size=4, noise_dim=3, seed=7,
             checkpoint_interval=5, log_interval=100,
@@ -409,17 +406,7 @@ class TestCheckpointRestore:
         # joint epochs and have to align with epoch numbers.
         n_joint_checkpoints = 20 // 5
         assert len(history['val_score']) == n_joint_checkpoints
-        # best_epoch / best_val_score are recorded whenever the
-        # checkpoint path produced at least one finite val_score;
-        # tiny models occasionally overflow into NaN so we only
-        # assert structural invariants when at least one finite
-        # score was observed.
-        finite_scores = [v for v in history['val_score']
-                         if np.isfinite(v)]
-        if finite_scores:
-            assert 'best_epoch' in history
-            assert history['best_epoch'] > 0
-            assert np.isfinite(history['best_val_score'])
-            # Picked checkpoint must be a multiple of the
-            # checkpoint_interval (1-indexed).
-            assert history['best_epoch'] % 5 == 0
+        assert np.isfinite(history['val_score']).all()
+        assert history['best_epoch'] > 0
+        assert history['best_epoch'] % 5 == 0
+        assert history['best_val_score'] == min(history['val_score'])
