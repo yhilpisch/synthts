@@ -286,3 +286,27 @@ class TestTemporalPlots:
         synth = np.random.randn(5, 50) * 0.01
         plot_drawdown_window_comparison(real, synth)
         assert plt.gcf().number > 0
+
+
+@pytest.mark.parametrize('values', [np.ones(3), np.arange(3.)])
+def test_acf_rejects_unsupported_horizon_consistently(values):
+    with pytest.raises(ValueError, match='max_lag'):
+        acf(values, max_lag=3)
+
+
+@pytest.mark.parametrize('values', [[], [np.nan], [[1., 2.]]])
+def test_metrics_reject_empty_nonfinite_or_nonscalar_series(values):
+    for metric in (max_drawdown, acf):
+        with pytest.raises(ValueError):
+            metric(np.array(values))
+
+
+def test_sorted_mse_rejects_unequal_lengths():
+    with pytest.raises(ValueError, match='equal-length'):
+        mse_sorted(np.ones(3), np.ones(4))
+
+
+def test_ks_batch_alpha_is_explicitly_deprecated():
+    with pytest.warns(DeprecationWarning, match='pass_rate'):
+        ks_test_batch(np.arange(4.), pd.DataFrame({'s': np.arange(4.)}),
+                       alpha=0.05)

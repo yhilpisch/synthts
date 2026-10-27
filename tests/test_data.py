@@ -94,3 +94,38 @@ class TestReturnScaler:
         scaled = scaler.fit_transform(rets)
         recovered = scaler.inverse_transform(scaled.flatten())
         np.testing.assert_allclose(recovered, rets, rtol=1e-10)
+
+
+@pytest.mark.parametrize('n_obs', [0, -1, 1.5, True])
+def test_load_eod_rejects_invalid_count(n_obs):
+    with pytest.raises(ValueError, match='n_obs'):
+        load_eod(url='not-read.csv', n_obs=n_obs)
+
+
+def test_multivariate_scaler_preserves_features_and_training_mean():
+    train = np.array([[1., 10.], [3., 20.], [5., 30.]])
+    future = np.array([[7., 40.], [9., 50.]])
+    scaler = ReturnScaler()
+    scaler.fit_transform(train)
+    mean = scaler.scaler.mean_.copy()
+    recovered = scaler.inverse_transform(scaler.transform(future))
+    assert recovered.shape == future.shape
+    np.testing.assert_allclose(recovered, future)
+    np.testing.assert_array_equal(scaler.scaler.mean_, mean)
+
+
+def test_returns_do_not_bridge_missing_prices():
+    prices = pd.Series([100., 110., np.nan, 121., 133.1])
+    np.testing.assert_allclose(compute_log_returns(prices),
+                               [np.log(1.1), np.log(1.1)])
+
+
+def test_extreme_positive_prices_produce_finite_log_returns():
+    result = compute_log_returns(pd.Series([1e-300, 1e300]))
+    np.testing.assert_allclose(result, [600 * np.log(10)])
+
+
+@pytest.mark.parametrize('values', [[], [np.nan], [[1., np.inf]]])
+def test_scaler_rejects_invalid_data(values):
+    with pytest.raises(ValueError):
+        ReturnScaler().fit_transform(np.array(values))

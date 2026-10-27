@@ -148,20 +148,6 @@ release pipeline, not Git. Verify save/load inference equivalence.
 These items should be addressed alongside release preparation, with scope
 kept proportional to the public API.
 
-### 10. Define boundary behaviour for data/evaluation helpers
-
-`acf` returns different lengths for constant versus varying short input
-under the same `max_lag`; comparing arrays of lengths three/five at the
-default lag raises a broadcasting error. Define supported lag/length
-rules consistently across metrics and plots. Specify empty/non-finite
-input handling and equal-length requirements for `mse_sorted`.
-
-`ReturnScaler` accepts multi-column data but flattens inverse output;
-either document/enforce a univariate contract or preserve feature shape.
-Define missing-price adjacency semantics in `compute_log_returns` and
-positive `n_obs` handling in `load_eod`. `ks_test_batch` accepts an unused
-`alpha` parameter. Resolve these contracts before stabilising the API.
-
 ### 11. Strengthen automation around actual release artefacts
 
 Keep the fast offline unit suite, but add the regressions above, sweep
@@ -205,6 +191,9 @@ Numerical correction stage: **154 tests passed** on the workspace Python
 initial-loss/extreme-path drawdown, effective mean/std weights, invalid
 horizons/settings, and non-finite loss/gradient rejection. Existing TimeGAN
 checkpoint tests now require finite scores and the minimum-score epoch.
+Data/evaluation stage: **69 focused tests passed**, covering training-only
+scaling, multivariate inversion, missing/extreme prices, count validation,
+short-series ACF rules, metric input rejection, and deprecated KS alpha.
 Historical metrics and stored notebook outputs have not been recomputed.
 
 Full training, held-out benchmarks, installed-distribution tests, clean

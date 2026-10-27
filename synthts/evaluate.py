@@ -4,22 +4,47 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import matplotlib.pyplot as plt
+import warnings
+
+from synthts._validation import integer
+
+
+def _series(values, name='returns'):
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 1 or not len(values):
+        raise ValueError(f'{name} must be a non-empty 1-D array')
+    if not np.isfinite(values).all():
+        raise ValueError(f'{name} must contain only finite values')
+    return values
+
+
+def _windows(values):
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 2 or min(values.shape) == 0:
+        raise ValueError('windows must be a non-empty 2-D array')
+    if not np.isfinite(values).all():
+        raise ValueError('windows must contain only finite values')
+    return values
 
 
 def ks_test(real: np.ndarray, synth: np.ndarray) -> dict:
-    """Two-sample Kolmogorov-Smirnov test.
+    """Two-sample Kolmogorov-Smirnov diagnostic.
+
+    The usual p-value assumes independent observations. Serial dependence,
+    overlapping windows, and in-sample fitting invalidate that interpretation.
+    Non-rejection does not establish equivalence or path realism.
 
     Returns
     -------
     dict
         Keys 'statistic', 'pvalue'.
     """
-    result = stats.ks_2samp(real, synth, method='asymp')
+    result = stats.ks_2samp(_series(real), _series(synth), method='asymp')
     return {'statistic': result.statistic, 'pvalue': result.pvalue}
 
 
 def ks_test_batch(real: np.ndarray, synth_df: pd.DataFrame,
-                  alpha: float=0.05) -> np.ndarray:
+                  alpha: float=None) -> np.ndarray:
     """Run KS test for every synthetic column against real data.
 
     Parameters
@@ -29,13 +54,16 @@ def ks_test_batch(real: np.ndarray, synth_df: pd.DataFrame,
     synth_df : pd.DataFrame
         Columns of synthetic returns.
     alpha : float
-        Significance level.
+        Deprecated compatibility parameter; use pass_rate to apply alpha.
 
     Returns
     -------
     np.ndarray
         Array of p-values.
     """
+    if alpha is not None:
+        warnings.warn('alpha is unused; apply it in pass_rate instead',
+                      DeprecationWarning, stacklevel=2)
     pvals = []
     for col in synth_df.columns:
         pvals.append(ks_test(real, synth_df[col].values)['pvalue'])
@@ -44,7 +72,12 @@ def ks_test_batch(real: np.ndarray, synth_df: pd.DataFrame,
 
 def pass_rate(pvals: np.ndarray, alpha: float=0.05) -> float:
     """Fraction of p-values above alpha."""
-    return (pvals > alpha).mean()
+    pvals = _series(pvals, 'pvals')
+    if not np.isfinite(alpha) or not 0 < alpha < 1:
+        raise ValueError('alpha must lie strictly between zero and one')
+    if ((pvals < 0) | (pvals > 1)).any():
+        raise ValueError('pvals must lie between zero and one')
+    return float((pvals > alpha).mean())
 
 
 def describe_comparison(data: pd.DataFrame, n_show: int=5) -> pd.DataFrame:
@@ -54,6 +87,9 @@ def describe_comparison(data: pd.DataFrame, n_show: int=5) -> pd.DataFrame:
 
 def mse_sorted(real: np.ndarray, synth: np.ndarray) -> float:
     """Mean squared error between sorted real and synthetic data."""
+    real, synth = _series(real), _series(synth)
+    if len(real) != len(synth):
+        raise ValueError('mse_sorted requires equal-length arrays')
     return ((np.sort(real) - np.sort(synth)) ** 2).mean()
 
 
@@ -62,7 +98,7 @@ def plot_real_vs_synth(data: pd.DataFrame, n_synth: int=1,
     """Overlay real and synthetic return paths."""
     data.iloc[:, :n_synth + 1].plot(
         style=['r'] + n_synth * ['b--'], lw=1, alpha=alpha)
-    plt.legend();
+    plt.legend()
 
 
 def plot_histograms(real: np.ndarray, synth: np.ndarray,
@@ -72,7 +108,7 @@ def plot_histograms(real: np.ndarray, synth: np.ndarray,
              density=True)
     plt.hist(synth, bins=bins, color='b', alpha=0.7, label='synthetic',
              density=True)
-    plt.legend();
+    plt.legend()
 
 
 def plot_sorted(real: np.ndarray, synth: np.ndarray,
@@ -90,7 +126,7 @@ def plot_sorted(real: np.ndarray, synth: np.ndarray,
     plt.plot(lims, lims, 'r--', lw=0.7, label='y = x')
     plt.xlabel('Real quantiles')
     plt.ylabel('Synthetic quantiles')
-    plt.legend();
+    plt.legend()
 
 
 def plot_cumulative(data: pd.DataFrame, n_synth: int=25):
@@ -108,14 +144,14 @@ def plot_cumulative(data: pd.DataFrame, n_synth: int=25):
             label='synth mean')
     real_path = data['real'].cumsum().apply(np.exp)
     ax.plot(real_path.index, real_path, 'r', lw=2, label='real')
-    ax.legend();
+    ax.legend()
 
 
 def plot_pvalue_histogram(pvals: np.ndarray, alpha: float=0.05):
     """Histogram of KS test p-values with significance line."""
     plt.hist(pvals, bins=100)
     plt.axvline(alpha, color='r')
-    plt.title('KS test p-values');
+    plt.title('KS test p-values')
 
 
 # ------------------------------------------------------------------
@@ -124,7 +160,8 @@ def plot_pvalue_histogram(pvals: np.ndarray, alpha: float=0.05):
 
 def rolling_windows(returns: np.ndarray, seq_len: int) -> np.ndarray:
     """Create overlapping return windows."""
-    returns = np.asarray(returns)
+    returns = _series(returns)
+    integer('seq_len', seq_len)
     if seq_len > len(returns):
         raise ValueError('seq_len must not exceed the number of returns')
     return np.lib.stride_tricks.sliding_window_view(returns, seq_len)
@@ -133,6 +170,7 @@ def rolling_windows(returns: np.ndarray, seq_len: int) -> np.ndarray:
 def sample_windows(returns: np.ndarray, seq_len: int, n_windows: int,
                    rng_seed: int=None) -> np.ndarray:
     """Sample contiguous return windows."""
+    integer('n_windows', n_windows)
     windows = rolling_windows(returns, seq_len)
     rng = np.random.default_rng(rng_seed)
     idx = rng.integers(0, len(windows), n_windows)
@@ -142,6 +180,7 @@ def sample_windows(returns: np.ndarray, seq_len: int, n_windows: int,
 def sequence_ks_pvalues(real_windows: np.ndarray,
                         synth_windows: np.ndarray) -> np.ndarray:
     """KS p-values for matched real and synthetic windows."""
+    real_windows, synth_windows = _windows(real_windows), _windows(synth_windows)
     n = min(len(real_windows), len(synth_windows))
     return np.array([
         ks_test(real_windows[i], synth_windows[i])['pvalue']
@@ -149,8 +188,12 @@ def sequence_ks_pvalues(real_windows: np.ndarray,
     ])
 
 def acf(x: np.ndarray, max_lag: int=20) -> np.ndarray:
-    """Autocorrelation function up to max_lag."""
+    """Biased ACF for 0 <= max_lag < len(x); constant inputs yield zeros."""
+    x = _series(x)
+    integer('max_lag', max_lag, minimum=0)
     n = len(x)
+    if max_lag >= n:
+        raise ValueError('max_lag must be smaller than the series length')
     x = x - x.mean()
     var = np.dot(x, x) / n
     if var == 0:
@@ -170,6 +213,7 @@ def compare_acf(real: np.ndarray, synth: np.ndarray,
         Keys 'acf_diff' (sum of abs differences in ACF),
         'acf2_diff' (same for squared returns).
     """
+    real, synth = _series(real), _series(synth)
     a_real = acf(real, max_lag)
     a_synth = acf(synth, max_lag)
     a2_real = acf(real ** 2, max_lag)
@@ -186,13 +230,16 @@ def compare_acf(real: np.ndarray, synth: np.ndarray,
 
 def average_acf(windows: np.ndarray, max_lag: int=20) -> np.ndarray:
     """Average ACF over a two-dimensional window array."""
-    return np.array([acf(w, max_lag) for w in windows]).mean(axis=0)
+    return np.array([acf(w, max_lag)
+                     for w in _windows(windows)]).mean(axis=0)
 
 
 def compare_acf_windows(real_windows: np.ndarray,
                         synth_windows: np.ndarray,
                         max_lag: int=20) -> dict:
     """Compare average ACFs of real and synthetic windows."""
+    real_windows = _windows(real_windows)
+    synth_windows = _windows(synth_windows)
     a_real = average_acf(real_windows, max_lag)
     a_synth = average_acf(synth_windows, max_lag)
     a2_real = average_acf(real_windows ** 2, max_lag)
@@ -212,11 +259,7 @@ def max_drawdown(returns: np.ndarray) -> float:
 
     Compute in log space to avoid overflow on long or extreme paths.
     """
-    returns = np.asarray(returns, dtype=float)
-    if returns.ndim != 1 or not len(returns):
-        raise ValueError('returns must be a non-empty 1-D array')
-    if not np.isfinite(returns).all():
-        raise ValueError('returns must contain only finite values')
+    returns = _series(returns)
     log_wealth = np.insert(np.cumsum(returns), 0, 0.0)
     peak = np.maximum.accumulate(log_wealth)
     return float(np.expm1((log_wealth - peak).min()))
@@ -231,6 +274,8 @@ def drawdown_distribution(returns: np.ndarray,
     for each.
     """
     from numpy.random import default_rng
+    returns = _series(returns)
+    integer('n_bootstrap', n_bootstrap)
     if len(returns) < 2:
         raise ValueError('returns must contain at least two observations')
     rng = default_rng(rng_seed)
@@ -245,7 +290,7 @@ def drawdown_distribution(returns: np.ndarray,
 
 def drawdown_distribution_windows(windows: np.ndarray) -> np.ndarray:
     """Maximum drawdown for every return window."""
-    return np.array([max_drawdown(w) for w in windows])
+    return np.array([max_drawdown(w) for w in _windows(windows)])
 
 
 def plot_acf_comparison(real: np.ndarray, synth: np.ndarray,
@@ -266,7 +311,7 @@ def plot_acf_comparison(real: np.ndarray, synth: np.ndarray,
                 color='b', alpha=0.7, label='synthetic')
     axes[1].set_title('Squared-return ACF')
     axes[1].legend()
-    plt.tight_layout();
+    plt.tight_layout()
 
 
 def plot_acf_window_comparison(real_windows: np.ndarray,
@@ -288,7 +333,7 @@ def plot_acf_window_comparison(real_windows: np.ndarray,
                 color='b', alpha=0.7, label='synthetic')
     axes[1].set_title('Squared-return ACF')
     axes[1].legend()
-    plt.tight_layout();
+    plt.tight_layout()
 
 
 def plot_drawdown_comparison(real: np.ndarray, synth: np.ndarray,
@@ -301,7 +346,7 @@ def plot_drawdown_comparison(real: np.ndarray, synth: np.ndarray,
     plt.hist(dd_synth, bins=bins, color='b', alpha=0.7,
              label='synthetic', density=True)
     plt.xlabel('Max drawdown')
-    plt.legend();
+    plt.legend()
 
 
 def plot_drawdown_window_comparison(real_windows: np.ndarray,
@@ -315,4 +360,4 @@ def plot_drawdown_window_comparison(real_windows: np.ndarray,
     plt.hist(dd_synth, bins=bins, color='b', alpha=0.7,
              label='synthetic', density=True)
     plt.xlabel('Max drawdown')
-    plt.legend();
+    plt.legend()
