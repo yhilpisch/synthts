@@ -97,51 +97,34 @@ example before asking users to run thousands of training steps.
 The original review's long-run validation and data-provenance concerns
 remain relevant, with the following concrete requirements.
 
-### 8. Separate calibration, model selection, and held-out evaluation
+### 8. Complete publication benchmarks
 
-Both sweep CLIs fit the scaler and train on the complete return series,
-then sample evaluation windows from that same series. TimeGAN's internal
-checkpoint `val_x` is also sampled from training windows. These are
-in-sample calibration scores, despite the validation terminology.
+Sweep selection now uses chronological validation returns, preprocessing is
+fit on training data only, and a final test partition is reserved. All
+configurations share a seed for comparable selection; repeat entire grids
+under several predeclared seeds for publication evidence. TimeGAN accepts
+held-out validation data and uses fixed scoring noise without consuming
+the training random stream.
 
-For generalisation claims, split chronologically before scaling/windowing,
-fit preprocessing on training data, keep windows within split boundaries,
-and reserve independent validation/test periods. Compare fixed budgets and
-multiple seeds using predefined metrics and simple resampling baselines.
-Sweep seeds currently vary with configuration/trial ID, which confounds
-configuration effects with seed effects. Retain a final test evaluation
-outside hyperparameter selection.
+Fixed-budget multi-seed comparisons, dependence-aware uncertainty, and
+resampling baselines remain to be run on an identified frozen real dataset.
+Historical scores remain in-sample observations and must not be promoted
+as evidence for the corrected protocol.
 
-KS non-rejection is not evidence of equivalent distributions or realistic
-paths. Serial dependence and overlapping sampled windows compromise the
-usual independent-sample p-value interpretation. Label current pass rates
-as descriptive diagnostics; use effect sizes and dependence-aware
-uncertainty for inferential claims. The sequential notebook's statements
-about stable training/realistic statistics need supporting evidence or
-more qualified wording.
+### 9. Establish canonical real-data provenance
 
-### 9. Freeze data and retain complete experiment contracts
+Sweeps now accept a local CSV, retain exact input bytes plus a same-stem
+metadata sidecar, and record SHA-256, retrieval time, symbol, date range,
+split boundaries, transformations, and dependency versions. They persist
+all trial components, constructor settings, and preprocessing as portable
+inference bundles; save/load equivalence is tested. These are not resumable
+optimiser checkpoints. Result directories are unique and exports into
+tracked selected YAML require explicit opt-in.
 
-Examples/sweeps download `https://hilpisch.com/eod_data.csv` without a
-retrieval date or checksum. Record source, date range, symbol, price
-definition/adjustments, retrieval date, checksum, transformations, schema,
-and redistribution terms. Provide an offline input path. If bundling a
-snapshot, use CSV plus a same-stem `.meta.json`; the current `*.csv` ignore
-rule will need a narrowly scoped exception.
-
-The three selected/reference YAML files point to ignored result directories
-that exist locally but are absent from a fresh clone. Treat their recorded
-metrics as historical observations, not newly verified benchmarks. Preserve
-the runs and identify which, if any, should back publication claims.
-The sweep CLIs write metrics/configuration but do not persist trained
-weights, fitted preprocessing, input checksums, or environment versions.
-TimeGAN checkpointing is only in-memory weight selection, not resumable
-training or a portable inference artefact.
-
-For any promoted model/result, retain architecture, weights, preprocessing,
-data identity, seeds, training settings, dependency versions, evaluation
-protocol, and metrics together. Store model binaries through the asset or
-release pipeline, not Git. Verify save/load inference equivalence.
+Source institution, price adjustments, redistribution rights, and the
+canonical snapshot/run for publication still need to be established.
+Preserve all existing ignored runs and the three historical selected/reference
+YAML files; their recorded metrics have not been reproduced or replaced.
 
 ## Additional quality work
 
@@ -194,6 +177,9 @@ checkpoint tests now require finite scores and the minimum-score epoch.
 Data/evaluation stage: **69 focused tests passed**, covering training-only
 scaling, multivariate inversion, missing/extreme prices, count validation,
 short-series ACF rules, metric input rejection, and deprecated KS alpha.
+Sweep/artifact stage: **41 focused tests passed**, including one offline
+serial TimeGAN CLI run, a two-worker sequential CLI run, configuration
+validation, chronological splitting, and inference bundle equivalence.
 Historical metrics and stored notebook outputs have not been recomputed.
 
 Full training, held-out benchmarks, installed-distribution tests, clean

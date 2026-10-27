@@ -6,7 +6,8 @@ import argparse
 import math
 from pathlib import Path
 
-import yaml
+from sweeps.common import load_config as read_config
+from synthts._validation import integer
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -28,9 +29,7 @@ def load_config(path: str) -> dict:
     """Load config file with defaults."""
     config = DEFAULT_CONFIG.copy()
     config_path = PROJECT_ROOT / path
-    if config_path.exists():
-        loaded = yaml.safe_load(config_path.read_text()) or {}
-        config.update(loaded)
+    config.update(read_config(config_path))
     return config
 
 
@@ -49,9 +48,13 @@ def main() -> None:
     if not grid_keys:
         grid_keys = sorted(k for k in config if k.endswith('_values'))
     counts = {key: len(parse_values(config[key])) for key in grid_keys}
+    if not counts or any(value == 0 for value in counts.values()):
+        raise ValueError('sweep grid must not be empty')
     total = math.prod(counts.values())
     max_trials = config['max_trials']
-    effective = min(total, max_trials) if max_trials else total
+    if max_trials is not None:
+        integer('max_trials', max_trials)
+    effective = min(total, max_trials) if max_trials is not None else total
 
     print(f'config: {PROJECT_ROOT / args.config}')
     for key in grid_keys:

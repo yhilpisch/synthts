@@ -22,6 +22,11 @@ class WGANGenerator(nn.Module):
             output_dim=output_dim,
         )
         super().__init__()
+        self.config = {
+            'latent_dim': latent_dim,
+            'hidden_units': hidden_units,
+            'output_dim': output_dim,
+        }
         self.net = nn.Sequential(
             nn.Linear(latent_dim, hidden_units),
             nn.ReLU(),
@@ -48,6 +53,10 @@ class Critic(nn.Module):
             hidden_units=hidden_units,
         )
         super().__init__()
+        self.config = {
+            'input_dim': input_dim,
+            'hidden_units': hidden_units,
+        }
         self.net = nn.Sequential(
             nn.utils.spectral_norm(nn.Linear(input_dim, hidden_units)),
             nn.LeakyReLU(0.2),

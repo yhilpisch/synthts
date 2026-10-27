@@ -7,7 +7,6 @@ import csv
 import itertools
 import json
 import os
-import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import redirect_stdout
@@ -20,11 +19,11 @@ import numpy as np
 import yaml
 from tqdm import tqdm
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from synthts.data import compute_log_returns, load_eod, ReturnScaler
+from synthts._validation import integer
+from synthts.artifacts import save_bundle
+from sweeps.common import (
+    finite_row, load_config, prepare_data, validate_settings,
+)
 from synthts.evaluate import (
     compare_acf_windows,
     drawdown_distribution_windows,
@@ -45,7 +44,12 @@ from synthts.timegan import (
 )
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 DEFAULT_CONFIG = {
+    'data_path': None,
+    'validation_fraction': 0.2,
+    'test_fraction': 0.2,
     'symbol': 'GLD',
     'n_jobs': 3,
     'torch_threads': 1,
@@ -93,8 +97,8 @@ DEFAULT_CONFIG = {
     'joint_epochs_values': [1500, 3000],
     # Output
     'out_dir': 'sweeps/results',
-    'export_best': 'sweeps/timegan_best.yml',
-    'export_on_complete': True,
+    'export_best': None,
+    'export_on_complete': False,
     'task_order': 'random',
     'task_order_seed': None,
 }
@@ -126,6 +130,8 @@ class SweepConfig:
     lr_schedule: str
     checkpoint_interval: int
     obs_adv_weight: float
+    obs_disc_channels: int
+    obs_disc_layers: int
     mean_weight: float
     std_weight: float
     central_quantile_weight: float
@@ -167,7 +173,7 @@ def build_configs(settings: dict) -> list[SweepConfig]:
          stat_w, stat_lag, joint_epochs) = values
         configs.append(SweepConfig(
             trial=trial,
-            seed=settings['seed'] + trial - 1,
+            seed=settings['seed'],
             seq_len=settings['seq_len'],
             input_dim=settings['input_dim'],
             output_dim=settings['output_dim'],
@@ -190,6 +196,8 @@ def build_configs(settings: dict) -> list[SweepConfig]:
             lr_schedule=settings['lr_schedule'],
             checkpoint_interval=settings['checkpoint_interval'],
             obs_adv_weight=settings['obs_adv_weight'],
+            obs_disc_channels=settings['obs_disc_channels'],
+            obs_disc_layers=settings['obs_disc_layers'],
             mean_weight=settings['mean_weight'],
             std_weight=settings['std_weight'],
             central_quantile_weight=settings['central_quantile_weight'],
@@ -206,7 +214,10 @@ def build_configs(settings: dict) -> list[SweepConfig]:
             order_seed = settings['seed']
         rng = np.random.default_rng(int(order_seed))
         rng.shuffle(configs)
-    if settings['max_trials']:
+    if not configs:
+        raise ValueError('sweep grid must not be empty')
+    if settings['max_trials'] is not None:
+        integer('max_trials', settings['max_trials'])
         configs = configs[:settings['max_trials']]
     return configs
 
@@ -234,7 +245,8 @@ def json_ready(row: dict) -> dict:
 
 def run_trial(payload: tuple) -> dict:
     """Train one TimeGAN configuration and return metrics."""
-    config, rets, rets_scaled, mean, scale, n_eval, threads = payload
+    (config, rets, rets_scaled, mean, scale, n_eval, threads,
+     validation_scaled, bundle_dir, metadata) = payload
     os.environ['OMP_NUM_THREADS'] = str(threads)
     os.environ['MKL_NUM_THREADS'] = str(threads)
 
@@ -278,8 +290,8 @@ def run_trial(payload: tuple) -> dict:
     )
     obs_discriminator = TimeGANObsDiscriminator(
         input_dim=config.input_dim,
-        hidden_channels=32,
-        num_layers=2,
+        hidden_channels=config.obs_disc_channels,
+        num_layers=config.obs_disc_layers,
     )
 
     start = time.time()
@@ -303,6 +315,7 @@ def run_trial(payload: tuple) -> dict:
             stat_max_lag=config.stat_max_lag,
             lr_schedule=config.lr_schedule,
             checkpoint_interval=config.checkpoint_interval,
+            validation_data=validation_scaled,
             obs_adv_weight=config.obs_adv_weight,
             mean_weight=config.mean_weight,
             std_weight=config.std_weight,
@@ -391,7 +404,23 @@ def run_trial(payload: tuple) -> dict:
     if 'obs_adv_loss' in history:
         row['final_obs_adv_loss'] = history['obs_adv_loss'][-1]
     row['score'] = score_metrics(row)
-    return json_ready(row)
+    row = finite_row(json_ready(row))
+    if bundle_dir is not None:
+        from synthts.data import ReturnScaler
+
+        scaler = ReturnScaler()
+        scaler.scaler.mean_ = np.array([mean])
+        scaler.scaler.scale_ = np.array([scale])
+        scaler.scaler.var_ = rets_scaled.var(axis=0) * scale ** 2
+        scaler.scaler.n_features_in_ = 1
+        scaler.scaler.n_samples_seen_ = len(rets_scaled)
+        models = {'embedder': embedder, 'recovery': recovery,
+                  'generator': generator, 'supervisor': supervisor,
+                  'discriminator': discriminator, 'obs_discriminator':
+                  obs_discriminator}
+        save_bundle(Path(bundle_dir) / f'trial_{config.trial:04d}.pt',
+                    models, scaler, {**metadata, 'trial': row})
+    return row
 
 
 def write_row(path: Path, row: dict) -> None:
@@ -409,11 +438,12 @@ def build_notebook_config(best: dict, settings: dict,
     """Build a notebook-ready config from the winning trial."""
     return {
         'source': {
-            'result_dir': str(result_dir.relative_to(PROJECT_ROOT)),
+            'result_dir': str(result_dir),
             'trial': int(best['trial']),
             'score': float(best['score']),
         },
-        'data': {'symbol': settings['symbol']},
+        'data': {key: settings[key] for key in (
+            'symbol', 'data_path', 'validation_fraction', 'test_fraction')},
         'model': {
             'seq_len': int(best['seq_len']),
             'input_dim': int(best['input_dim']),
@@ -423,6 +453,8 @@ def build_notebook_config(best: dict, settings: dict,
             'noise_dim': int(best['noise_dim']),
             'num_layers': int(best['num_layers']),
             'latent_activation': best['latent_activation'],
+            'obs_disc_channels': int(best['obs_disc_channels']),
+            'obs_disc_layers': int(best['obs_disc_layers']),
         },
         'training': {
             'embedding_epochs': int(best['embedding_epochs']),
@@ -476,7 +508,7 @@ def build_notebook_config(best: dict, settings: dict,
 def export_best_config(best: dict, settings: dict,
                        result_dir: Path) -> Path | None:
     """Export the winning trial as notebook-ready YAML."""
-    if not settings.get('export_on_complete', True):
+    if not settings.get('export_on_complete', False):
         return None
     export_path_raw = settings.get('export_best')
     if not export_path_raw:
@@ -495,18 +527,18 @@ def load_settings(args: argparse.Namespace) -> dict:
     """Merge defaults, YAML config, and CLI overrides."""
     settings = DEFAULT_CONFIG.copy()
     config_path = PROJECT_ROOT / args.config
-    if config_path.exists():
-        loaded = yaml.safe_load(config_path.read_text()) or {}
-        settings.update(loaded)
+    settings.update(load_config(config_path))
     overrides = vars(args).copy()
     overrides.pop('config')
     settings.update(overrides)
+    validate_settings(settings)
     return settings
 
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser()
+    parser.add_argument('--data-path', default=argparse.SUPPRESS)
     parser.add_argument('--config', default='sweeps/timegan_config.yml')
     parser.add_argument('--n-jobs', type=int, default=argparse.SUPPRESS)
     parser.add_argument('--torch-threads', type=int,
@@ -544,24 +576,23 @@ def main() -> None:
     """Run the TimeGAN sweep."""
     args = parse_args()
     settings = load_settings(args)
-    run_id = datetime.now().strftime('timegan_%Y%m%d_%H%M%S')
+    configs = build_configs(settings)
+    run_id = datetime.now().strftime('timegan_%Y%m%d_%H%M%S_%f')
     out_dir = PROJECT_ROOT / settings['out_dir'] / run_id
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=False)
     csv_path = out_dir / 'results.csv'
     best_path = out_dir / 'best_config.json'
     settings_path = out_dir / 'effective_config.yml'
     settings_path.write_text(yaml.safe_dump(settings, sort_keys=True))
 
-    prices = load_eod(symbol=settings['symbol'])
-    rets = compute_log_returns(prices)
-    scaler = ReturnScaler()
-    rets_scaled = scaler.fit_transform(rets)
+    train, validation, test, rets_scaled, scaler, metadata = prepare_data(
+        settings, snapshot_dir=out_dir)
     mean = float(scaler.scaler.mean_[0])
     scale = float(scaler.scaler.scale_[0])
-    configs = build_configs(settings)
     payloads = [
-        (config, rets, rets_scaled, mean, scale,
-         settings['n_eval'], settings['torch_threads'])
+        (config, validation, rets_scaled, mean, scale,
+         settings['n_eval'], settings['torch_threads'],
+         scaler.transform(validation), str(out_dir), metadata)
         for config in configs
     ]
     print(f'Writing results to {out_dir}')
@@ -578,7 +609,6 @@ def main() -> None:
             if best is None or row['score'] < best['score']:
                 best = row
             best_path.write_text(json.dumps(best, indent=2))
-            export_best_config(best, settings, out_dir)
             progress.set_postfix(
                 trial=f'{row["trial"]:03d}',
                 score=f'{row["score"]:.4f}',
@@ -598,7 +628,6 @@ def main() -> None:
                 if best is None or row['score'] < best['score']:
                     best = row
                 best_path.write_text(json.dumps(best, indent=2))
-                export_best_config(best, settings, out_dir)
                 progress.set_postfix(
                     trial=f'{row["trial"]:03d}',
                     score=f'{row["score"]:.4f}',

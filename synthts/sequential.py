@@ -33,6 +33,14 @@ class SeqGenerator(nn.Module):
             num_layers=num_layers,
         )
         super().__init__()
+        self.config = {
+            'latent_dim': latent_dim,
+            'noise_dim': noise_dim,
+            'hidden_units': hidden_units,
+            'output_dim': output_dim,
+            'seq_len': seq_len,
+            'num_layers': num_layers,
+        }
         self.latent_dim = latent_dim
         self.noise_dim = noise_dim
         self.hidden_units = hidden_units
@@ -81,6 +89,10 @@ class SeqDiscriminator(nn.Module):
             hidden_units=hidden_units,
         )
         super().__init__()
+        self.config = {
+            'input_dim': input_dim,
+            'hidden_units': hidden_units,
+        }
         self.net = nn.Sequential(
             nn.utils.spectral_norm(
                 nn.Conv1d(input_dim, hidden_units, 3, padding=1)),

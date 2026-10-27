@@ -8,8 +8,8 @@ n_jobs: 3
 torch_threads: 1
 max_trials: 24
 out_dir: sweeps/results
-export_best: sweeps/timegan_best.yml
-export_on_complete: true
+export_best: null
+export_on_complete: false
 task_order: random
 task_order_seed: null
 
@@ -71,3 +71,8 @@ moment_weight_values: [50.0]
 stat_weight_values: [10.0, 25.0]
 stat_max_lag_values: [10, 20]
 joint_epochs_values: [2000]
+
+# Split returns chronologically before scaling or window creation.
+validation_fraction: 0.2
+test_fraction: 0.2
+data_path: null

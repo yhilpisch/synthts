@@ -30,6 +30,13 @@ class TimeGANEmbedder(nn.Module):
             num_layers=num_layers,
         )
         super().__init__()
+        self.config = {
+            'input_dim': input_dim,
+            'hidden_units': hidden_units,
+            'latent_dim': latent_dim,
+            'num_layers': num_layers,
+            'latent_activation': latent_activation,
+        }
         if latent_activation not in ('tanh', 'layernorm'):
             raise ValueError(
                 "latent_activation must be 'tanh' or 'layernorm'")
@@ -63,6 +70,12 @@ class TimeGANRecovery(nn.Module):
             num_layers=num_layers,
         )
         super().__init__()
+        self.config = {
+            'latent_dim': latent_dim,
+            'hidden_units': hidden_units,
+            'output_dim': output_dim,
+            'num_layers': num_layers,
+        }
         self.latent_dim = latent_dim
         self.hidden_units = hidden_units
         self.output_dim = output_dim
@@ -88,6 +101,13 @@ class TimeGANGenerator(nn.Module):
             num_layers=num_layers,
         )
         super().__init__()
+        self.config = {
+            'noise_dim': noise_dim,
+            'hidden_units': hidden_units,
+            'latent_dim': latent_dim,
+            'num_layers': num_layers,
+            'latent_activation': latent_activation,
+        }
         if latent_activation not in ('tanh', 'layernorm'):
             raise ValueError(
                 "latent_activation must be 'tanh' or 'layernorm'")
@@ -121,6 +141,12 @@ class TimeGANSupervisor(nn.Module):
             num_layers=num_layers,
         )
         super().__init__()
+        self.config = {
+            'latent_dim': latent_dim,
+            'hidden_units': hidden_units,
+            'num_layers': num_layers,
+            'latent_activation': latent_activation,
+        }
         if latent_activation not in ('tanh', 'layernorm'):
             raise ValueError(
                 "latent_activation must be 'tanh' or 'layernorm'")
@@ -152,6 +178,11 @@ class TimeGANDiscriminator(nn.Module):
             num_layers=num_layers,
         )
         super().__init__()
+        self.config = {
+            'latent_dim': latent_dim,
+            'hidden_units': hidden_units,
+            'num_layers': num_layers,
+        }
         self.latent_dim = latent_dim
         self.hidden_units = hidden_units
         self.rnn = nn.GRU(latent_dim, hidden_units,
@@ -182,6 +213,11 @@ class TimeGANObsDiscriminator(nn.Module):
             num_layers=num_layers,
         )
         super().__init__()
+        self.config = {
+            'input_dim': input_dim,
+            'hidden_channels': hidden_channels,
+            'num_layers': num_layers,
+        }
         self.input_dim = input_dim
         layers = []
         in_ch = input_dim
@@ -436,7 +472,7 @@ def train_timegan(
         lr_schedule: str='none',
         seed: int=100,
         log_interval: int=500,
-        device: str='cpu') -> dict:
+        device: str='cpu', validation_data=None) -> dict:
     """Train TimeGAN with embedding, supervisor, and joint phases.
 
     Parameters
@@ -444,9 +480,12 @@ def train_timegan(
     mean_weight, std_weight : float
         Component multipliers inside moment_weight *
         (mean_weight * mean_loss + std_weight * std_loss).
+    validation_data : np.ndarray, optional
+        Separately scaled held-out observations for checkpoint selection.
+        Without this argument, checkpoint scoring is in-sample calibration.
     checkpoint_interval : int
         Evaluate a calibration score every N joint epochs and keep the
-        best model. Uses training windows, not held-out validation.
+        best model. Uses validation_data when supplied, otherwise training windows.
         0 disables checkpointing.
     lr_schedule : str
         Learning rate schedule for joint training.
@@ -530,8 +569,14 @@ def train_timegan(
     best_epoch = 0
     if checkpoint_interval > 0:
         val_rng = default_rng(seed + 999_999)
-        val_idx = val_rng.integers(0, n_windows, batch_size)
-        val_x = windows[val_idx]
+        val_windows = (windows if validation_data is None else _make_windows(
+            training_settings(validation_data, batch_size, log_interval),
+            seq_len, device))
+        val_idx = val_rng.integers(0, len(val_windows), batch_size)
+        val_x = val_windows[val_idx]
+        val_generator = torch.Generator(device=device).manual_seed(seed + 999)
+        val_z = torch.randn(batch_size, seq_len, noise_dim, device=device,
+                            generator=val_generator)
 
     bce = nn.BCEWithLogitsLoss()
     history: dict[str, list] = {
@@ -692,9 +737,7 @@ def train_timegan(
                 r.eval()
                 g.eval()
                 s.eval()
-                z_val = _sample_noise(batch_size, seq_len,
-                                      noise_dim, device)
-                x_hat_val = r(s(g(z_val)))
+                x_hat_val = r(s(g(val_z)))
                 val_mom = _moment_loss(val_x, x_hat_val)
                 val_losses = compute_financial_losses(
                     val_x, x_hat_val, max_lag=stat_max_lag)

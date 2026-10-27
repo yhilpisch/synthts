@@ -10,8 +10,8 @@ n_jobs: 3
 torch_threads: 1
 max_trials: null
 out_dir: sweeps/results
-export_best: sweeps/sequential_best.yml
-export_on_complete: true
+export_best: null
+export_on_complete: false
 task_order: random
 task_order_seed: null
 
@@ -34,3 +34,8 @@ batch_size_values: [128, 256]
 lr_g_values: [0.0002, 0.0003]
 stat_weight_values: [3.0, 5.0, 7.5]
 epochs_values: [750]
+
+# Split returns chronologically before scaling or window creation.
+validation_fraction: 0.2
+test_fraction: 0.2
+data_path: null
