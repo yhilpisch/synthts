@@ -1,6 +1,6 @@
 # Remaining Publication Work
 
-Updated 2026-10-27. The distribution/import name is **synthts**; candidate
+Updated 2026-10-28. The distribution/import name is **synthts**; candidate
 version **0.1.0** is prepared locally. Only unresolved work is listed below.
 
 The maintained inventory comprises ten package modules, four notebooks,
@@ -12,13 +12,13 @@ metadata/checksums, validation results, and all trial inference bundles.
 
 ## Publication decisions and external setup
 
-The licence and GitHub owner/repository are not yet specified. Add the
-chosen `LICENSE`, SPDX licence metadata, and Source/Issues URLs before
-publication. Confirm PyPI/TestPyPI name ownership, configure the remote and
-Trusted Publishers/environments, and rehearse the release from the same
-commit/tag intended for production. No remote, tag, push, or upload has been
-performed. The archive publication gate deliberately fails while licence or
-repository metadata is absent. See `RELEASE.md` for the concrete procedure.
+The remote is configured as `git@github.com:yhilpisch/synthts.git`, with
+Source/Issues package metadata. Licence selection remains pending: add the
+chosen `LICENSE` and SPDX licence metadata before publication. Confirm
+PyPI/TestPyPI name ownership, configure Trusted Publishers/environments,
+and rehearse the release from the same commit/tag intended for production.
+No tag, push, or upload has been performed. The publication gate still
+fails while licence metadata is absent. See `RELEASE.md` for the procedure.
 
 ## Canonical data and empirical evidence
 

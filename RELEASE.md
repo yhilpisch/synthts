@@ -6,12 +6,14 @@ and distribution are both `synthts`; the version is defined once in
 
 ## Publication prerequisites
 
-Choose and add the licence before distribution. Configure the intended
-GitHub repository and add its Source/Issues URLs to `pyproject.toml`.
+Choose and add the licence before distribution. The configured remote is
+`git@github.com:yhilpisch/synthts.git`; Source/Issues metadata points to
+`https://github.com/yhilpisch/synthts`. Confirm that public `main` contains
+the reviewed notebooks/package before sharing Colab links.
 Confirm ownership/availability of `synthts` on PyPI and TestPyPI. Configure
 Trusted Publishers for `.github/workflows/release.yml` with the corresponding
 `pypi`/`testpypi` GitHub environments. These account settings are external to
-the source tree. Licence selection and remote creation are not inferred.
+the source tree. Licence selection remains pending.
 
 The official references are the
 [PyPA packaging guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/)

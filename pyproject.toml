@@ -38,6 +38,8 @@ dev = [
 
 [project.urls]
 Homepage = "https://tpq.io"
+Source = "https://github.com/yhilpisch/synthts"
+Issues = "https://github.com/yhilpisch/synthts/issues"
 
 [tool.setuptools]
 packages = ["synthts"]

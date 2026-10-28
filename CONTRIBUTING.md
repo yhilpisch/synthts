@@ -30,5 +30,6 @@ or generated figures. Use ignored run directories or release assets instead.
 
 Report reproducible problems with the package version, environment, minimal
 example, and expected/observed behaviour. Include synthetic or redistributable
-inputs; never include account credentials or proprietary data. Until a public
-repository is configured, contact team@tpq.io for support.
+inputs; never include account credentials or proprietary data. Use the
+[issue tracker](https://github.com/yhilpisch/synthts/issues), or contact
+team@tpq.io for support.
