@@ -7,6 +7,7 @@ checks from the checkout root:
 python -m pip install '.[dev]'
 python -m ruff check synthts sweeps tests scripts
 python -m pytest
+python scripts/validate_colab.py
 python -m build
 python -m twine check dist/*
 python scripts/check_distribution.py dist
@@ -14,7 +15,11 @@ python scripts/check_distribution.py dist
 
 The test suite uses small deterministic synthetic inputs. Notebook tests
 execute all code with reduced training budgets and local prices. They do
-not establish long-run convergence or financial realism.
+not establish long-run convergence or financial realism. Bootstrap tests
+cover GitHub installation, local checkout detection, missing dependencies,
+existing installations, and installation failures. For full unchanged
+notebook execution, run `python scripts/validate_colab.py --execute` and use
+`--report` to retain the validation evidence. This runs all training steps.
 
 Keep changes focused and include regressions for changed numerical behaviour.
 Use at most 80 characters per Python line and two spaces before inline

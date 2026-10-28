@@ -50,6 +50,34 @@ The distribution and import package are both named `synthts`. Version
 form the configured CI matrix. Dependency lower bounds are compatibility
 constraints, not a frozen research environment.
 
+## Google Colab
+
+Open a notebook and select **Runtime → Run all** on a standard CPU runtime.
+The first code cell installs `synthts` and missing dependencies, using public
+GitHub `main` before PyPI publication. Existing installations are reused;
+local checkout execution prefers the local package.
+
+| Notebook | Open in Colab |
+|---|---|
+| Vanilla GAN | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yhilpisch/synthts/blob/main/notebooks/01_synthetic_gan.ipynb) |
+| Spectral-normalised GAN/WGAN-GP | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yhilpisch/synthts/blob/main/notebooks/02_wgan_gp.ipynb) |
+| Sequential GAN | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yhilpisch/synthts/blob/main/notebooks/03_sequential.ipynb) |
+| TimeGAN | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yhilpisch/synthts/blob/main/notebooks/04_timegan.ipynb) |
+
+These links require the notebooks/package on public `main`. No Google Drive
+mount, API credentials, or uploaded files are required. Financial examples
+download public end-of-day prices; frozen local input and an explicit YAML
+configuration remain optional. The existing training budgets are retained;
+training can take several minutes on CPU. The small networks use one CPU
+thread for predictable runtimes. Hosted Colab runs remain to be confirmed.
+
+Run `python scripts/validate_colab.py` for notebook/setup checks. Add
+`--execute` to run every notebook unchanged with plotting in fresh kernels,
+using the current interpreter and a temporary installation of this checkout.
+Add `--report /tmp/synthts-colab-report.json` to record timings, versions,
+notebook hashes, and failures. Full execution retains every training step;
+it leaves source notebooks and the current environment unchanged.
+
 ## Offline example
 
 This small synthetic-input run checks the API without a market-data download.

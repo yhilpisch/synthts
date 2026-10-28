@@ -36,6 +36,7 @@ jobs:
       - name: Lint and test
         run: |
           python -m ruff check synthts sweeps tests scripts
+          python scripts/validate_colab.py
           python -m pytest
 
   minimum:
