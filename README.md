@@ -69,7 +69,9 @@ mount, API credentials, or uploaded files are required. Financial examples
 download public end-of-day prices; frozen local input and an explicit YAML
 configuration remain optional. The existing training budgets are retained;
 training can take several minutes on CPU. The small networks use one CPU
-thread for predictable runtimes. Hosted Colab runs remain to be confirmed.
+thread for predictable runtimes. All four notebooks have passed full local
+CPU execution with public data and unchanged training budgets; hosted Colab
+runs remain to be confirmed.
 
 Run `python scripts/validate_colab.py` for notebook/setup checks. Add
 `--execute` to run every notebook unchanged with plotting in fresh kernels,
